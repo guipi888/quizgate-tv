@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色 TV 主题：高对比，10 英尺可读 -->
+    <color name="bg">#12161C</color>
+    <color name="card">#1C232D</color>
+    <color name="card_pressed">#2A3442</color>
+    <color name="stroke">#39434F</color>
+    <color name="accent">#D97A3E</color>
+    <color name="text">#F5EDE4</color>
+    <color name="text_secondary">#9AA4B0</color>
+    <color name="correct">#2E7D5B</color>
+    <color name="wrong">#B34431</color>
+    <color name="dark_on_accent">#1A1208</color>
+</resources>

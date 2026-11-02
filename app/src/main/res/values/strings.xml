@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">答题门禁</string>
+    <string name="pin_parent_verify">家长解锁：请输入 PIN</string>
+    <string name="pin_enter_new">请输入新 PIN</string>
+    <string name="pin_confirm_new">请再次输入新 PIN</string>
+</resources>

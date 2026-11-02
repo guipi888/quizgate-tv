@@ -1,0 +1,222 @@
+{
+ "name": "小学英语单词示例",
+ "type": "word_choice",
+ "questions": [
+  {
+   "q": "苹果",
+   "a": "apple",
+   "d": [
+    "banana",
+    "orange",
+    "grape"
+   ]
+  },
+  {
+   "q": "铅笔",
+   "a": "pencil",
+   "d": [
+    "ruler",
+    "eraser",
+    "crayon"
+   ]
+  },
+  {
+   "q": "教室",
+   "a": "classroom",
+   "d": [
+    "library",
+    "playground",
+    "office"
+   ]
+  },
+  {
+   "q": "医生",
+   "a": "doctor",
+   "d": [
+    "nurse",
+    "teacher",
+    "farmer"
+   ]
+  },
+  {
+   "q": "冬天",
+   "a": "winter",
+   "d": [
+    "spring",
+    "summer",
+    "autumn"
+   ]
+  },
+  {
+   "q": "自行车",
+   "a": "bicycle",
+   "d": [
+    "motorcycle",
+    "scooter",
+    "subway"
+   ]
+  },
+  {
+   "q": "雨伞",
+   "a": "umbrella",
+   "d": [
+    "raincoat",
+    "gloves",
+    "hat"
+   ]
+  },
+  {
+   "q": "图书馆",
+   "a": "library",
+   "d": [
+    "museum",
+    "cinema",
+    "hospital"
+   ]
+  },
+  {
+   "q": "星期一",
+   "a": "monday",
+   "d": [
+    "tuesday",
+    "wednesday",
+    "friday"
+   ]
+  },
+  {
+   "q": "紫色",
+   "a": "purple",
+   "d": [
+    "yellow",
+    "pink",
+    "brown"
+   ]
+  },
+  {
+   "q": "厨房",
+   "a": "kitchen",
+   "d": [
+    "bedroom",
+    "bathroom",
+    "balcony"
+   ]
+  },
+  {
+   "q": "长城",
+   "a": "the great wall",
+   "d": [
+    "the forbidden city",
+    "the summer palace",
+    "west lake"
+   ]
+  },
+  {
+   "q": "卷笔刀",
+   "a": "sharpener",
+   "d": [
+    "schoolbag",
+    "textbook",
+    "notebook"
+   ]
+  },
+  {
+   "q": "洗衣机",
+   "a": "washing machine",
+   "d": [
+    "refrigerator",
+    "microwave",
+    "air conditioner"
+   ]
+  },
+  {
+   "q": "长颈鹿",
+   "a": "giraffe",
+   "d": [
+    "elephant",
+    "monkey",
+    "kangaroo"
+   ]
+  },
+  {
+   "q": "护士",
+   "a": "nurse",
+   "d": [
+    "surgeon",
+    "patient",
+    "dentist"
+   ]
+  },
+  {
+   "q": "公园",
+   "a": "park",
+   "d": [
+    "zoo",
+    "farm",
+    "square"
+   ]
+  },
+  {
+   "q": "蔬菜",
+   "a": "vegetable",
+   "d": [
+    "fruit",
+    "meat",
+    "dessert"
+   ]
+  },
+  {
+   "q": "红色的",
+   "a": "red",
+   "d": [
+    "blue",
+    "green",
+    "black"
+   ]
+  },
+  {
+   "q": "计算机",
+   "a": "computer",
+   "d": [
+    "calculator",
+    "telephone",
+    "television"
+   ]
+  },
+  {
+   "q": "明天",
+   "a": "tomorrow",
+   "d": [
+    "yesterday",
+    "today",
+    "tonight"
+   ]
+  },
+  {
+   "q": "晴朗的",
+   "a": "sunny",
+   "d": [
+    "cloudy",
+    "windy",
+    "snowy"
+   ]
+  },
+  {
+   "q": "楼梯",
+   "a": "stairs",
+   "d": [
+    "elevator",
+    "corridor",
+    "escalator"
+   ]
+  },
+  {
+   "q": "餐馆",
+   "a": "restaurant",
+   "d": [
+    "hotel",
+    "bakery",
+    "supermarket"
+   ]
+  }
+ ]
+}

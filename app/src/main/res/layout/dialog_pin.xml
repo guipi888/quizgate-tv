@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/card"
+    android:gravity="center_horizontal"
+    android:minWidth="480dp"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/tv_pin_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_pin_dots"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:letterSpacing="0.3"
+        android:text="○ ○ ○ ○"
+        android:textColor="@color/accent"
+        android:textSize="36sp"
+        android:textStyle="bold" />
+
+    <GridLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:columnCount="3">
+
+        <Button
+            android:id="@+id/btn_d1"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d2"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d3"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d4"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d5"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d6"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d7"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d8"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_d9"
+            style="@style/PinKey" />
+
+        <Button
+            android:id="@+id/btn_del"
+            style="@style/PinKey"
+            android:text="删除" />
+
+        <Button
+            android:id="@+id/btn_d0"
+            style="@style/PinKey"
+            android:text="0" />
+
+        <Button
+            android:id="@+id/btn_ok"
+            style="@style/PinKey"
+            android:text="确认" />
+    </GridLayout>
+</LinearLayout>

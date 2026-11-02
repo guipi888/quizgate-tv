@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="@color/accent"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="观看时长（分钟）"
+            android:textColor="@color/text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <ToggleButton
+                android:id="@+id/tg_m15"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="15"
+                android:textOn="15"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_m30"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="30"
+                android:textOn="30"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_m45"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="45"
+                android:textOn="45"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_m60"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="60"
+                android:textOn="60"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_m90"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="90"
+                android:textOn="90"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_m120"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="120"
+                android:textOn="120"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="解锁需连对题数"
+            android:textColor="@color/text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <ToggleButton
+                android:id="@+id/tg_s3"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="3 题"
+                android:textOn="3 题"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_s5"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="5 题"
+                android:textOn="5 题"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_s10"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="10 题"
+                android:textOn="10 题"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="题型（至少选一种）"
+            android:textColor="@color/text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <ToggleButton
+                android:id="@+id/tg_pinyin"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="汉字拼音"
+                android:textOn="汉字拼音"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_math"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="数学口算"
+                android:textOn="数学口算"
+                android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_word"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="英语单词"
+                android:textOn="英语单词"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="题库"
+            android:textColor="@color/text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_bank_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="把题库 JSON 文件放进 U 盘 QuizGate/banks/ 目录，插入电视后点下方按钮重新扫描"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btn_rescan_bank"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_button_secondary"
+            android:text="重新扫描题库"
+            android:textColor="@color/accent"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="家长 PIN"
+            android:textColor="@color/text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btn_change_pin"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_button_secondary"
+            android:text="修改 PIN（默认 1234，请尽快修改）"
+            android:textColor="@color/accent"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="系统设置（防绕过）"
+            android:textColor="@color/text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btn_overlay_perm"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_button_secondary"
+            android:text="开启悬浮窗权限（锁屏防绕过必需）"
+            android:textColor="@color/accent"
+            android:textSize="18sp" />
+
+        <Button
+            android:id="@+id/btn_default_home"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_button_secondary"
+            android:text="设为默认桌面（可选增强，防 HOME 绕过）"
+            android:textColor="@color/accent"
+            android:textSize="18sp" />
+
+        <Button
+            android:id="@+id/btn_start_timer"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="28dp"
+            android:background="@drawable/bg_button_primary"
+            android:text="开始计时"
+            android:textColor="@color/dark_on_accent"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btn_lock_now"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="24dp"
+            android:background="@drawable/bg_button_secondary"
+            android:text="立即锁定（测试）"
+            android:textColor="@color/accent"
+            android:textSize="18sp" />
+    </LinearLayout>
+</ScrollView>
