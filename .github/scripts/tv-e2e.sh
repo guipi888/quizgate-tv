@@ -17,29 +17,44 @@ set -euo pipefail
 PKG=com.quizgate.tv
 TEST_PKG="$PKG.test"
 
-echo "== 等待 adb 连接稳定 =="
+# 所有 adb 调用默认 60s 超时；长任务用 ADB_TIMEOUT=xxx 覆盖。
+# 背景：九跑 API 34 在测试/重启段挂死 2 小时以上才被人工取消——
+# am instrument -w 或 P0 ⑧ 的 adb wait-for-device 是无界等待，
+# adb 通道抖动时永久挂起，只能等 GitHub 6 小时 job 上限才失败。
+# 原则：宁可快速失败留证（am-instrument.log + 截图），不无限挂起。
+# 注意：timeout 是外部命令，不能跑 shell 内建 command，先用 command -v
+# 解析出 adb 真实路径（本地冒烟测试坐实过这一点：直接写 command adb
+# 会让每次调用都以 127 失败）。
+adb() {
+  timeout "${ADB_TIMEOUT:-60}" "$(command -v adb)" "$@"
+}
+log() {
+  echo "[$(date -u +%H:%M:%SZ)] $*"
+}
+
+log "== 等待 adb 连接稳定 =="
 # API 34 TV 镜像实测（2026-11-05 八跑日志）：emulator 报 boot completed
 # 之后，adb 仍持续 "device offline" 抖动近 20 秒（settings put 连续
 # 失败 3 次才恢复）。不稳定的 adb 通道会让 ddmlib 的持久 shell 安装
 # 无响应（ShellCommandUnresponsiveException）。先过稳定性闸门再干活。
 STABLE=0
-for round in $(seq 1 30); do
+for round in $(seq 1 15); do
   OK=1
   for probe in 1 2 3; do
-    if ! adb shell echo ok >/dev/null 2>&1; then OK=0; break; fi
+    if ! ADB_TIMEOUT=10 adb shell echo ok >/dev/null 2>&1; then OK=0; break; fi
     sleep 1
   done
   if [ "$OK" = "1" ]; then STABLE=1; break; fi
-  echo "::warning::adb 第 $round 轮探测仍不稳定，尝试 reconnect"
+  log "::warning::adb 第 $round 轮探测仍不稳定，尝试 reconnect"
   adb reconnect offline 2>/dev/null || adb reconnect 2>/dev/null || true
   sleep 3
 done
 if [ "$STABLE" != "1" ]; then
-  echo "::error::adb 连接 30 轮探测后仍不稳定，放弃"
+  log "::error::adb 连接 15 轮探测后仍不稳定，放弃"
   adb exec-out screencap -p > tv-failure.png || true
   exit 1
 fi
-echo "adb 连接稳定"
+log "adb 连接稳定"
 
 # 按设备 SDK 选择安装/测试通道：
 #   API 28/30 → gradle（ddmlib）通道：连续多轮全绿，保持不动；
@@ -68,21 +83,21 @@ install_app() {
   fi
 }
 
-echo "== 安装 App 与仪器测试 APK =="
+log "== 安装 App 与仪器测试 APK =="
 if [ "$CLI_MODE" = "1" ]; then
   ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
   INSTALL_OK=0
   for i in 1 2 3; do
-    if adb install -r -t app/build/outputs/apk/debug/app-debug.apk \
-      && adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; then
+    if ADB_TIMEOUT=180 adb install -r -t app/build/outputs/apk/debug/app-debug.apk \
+      && ADB_TIMEOUT=180 adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; then
       INSTALL_OK=1
       break
     fi
-    echo "::warning::adb install 失败（第 $i 次），重试"
+    log "::warning::adb install 失败（第 $i 次），重试"
     sleep 5
   done
   if [ "$INSTALL_OK" != "1" ]; then
-    echo "::error::adb install 三次均失败"
+    log "::error::adb install 三次均失败"
     adb exec-out screencap -p > tv-failure.png || true
     exit 1
   fi
@@ -94,7 +109,7 @@ else
       INSTALL_OK=1
       break
     fi
-    echo "::warning::安装失败（第 $i 次），重启 adb server 后重试"
+    log "::warning::安装失败（第 $i 次），重启 adb server 后重试"
     adb kill-server || true
     sleep 5
     adb start-server || true
@@ -102,7 +117,7 @@ else
     sleep 10
   done
   if [ "$INSTALL_OK" != "1" ]; then
-    echo "::error::安装 App 与仪器测试 APK 三次均失败"
+    log "::error::安装 App 与仪器测试 APK 三次均失败"
     adb exec-out screencap -p > tv-failure.png || true
     exit 1
   fi
@@ -131,7 +146,7 @@ echo "TV 桌面可见 OK"
 FAIL=0
 
 
-echo "== 单元测试 + 仪器测试 =="
+log "== 单元测试 + 仪器测试 =="
 if [ "$CLI_MODE" = "1" ]; then
   # 单元测试：本地 JVM，照走 gradle
   if ! ./gradlew testDebugUnitTest --no-daemon; then
@@ -144,16 +159,20 @@ if [ "$CLI_MODE" = "1" ]; then
   #   有失败 → 打印 FAILURES!!!；进程被杀 → "Process crashed"。
   # 不用退出码判定：adb shell 连接关闭时会返回伪 255（protocol fault），
   # 会把全绿误判成失败。
+  # ADB_TIMEOUT=1200：正常约 3-5 分钟（swiftshader 软渲染）；九跑疑似
+  # 在此无限挂起，必须有界——超时即失败并留 am-instrument.log 取证。
+  log "仪器测试开始（am instrument，上限 20 分钟）"
   INSTR_LOG=$(mktemp)
-  adb shell am instrument -w "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" \
+  ADB_TIMEOUT=1200 adb shell am instrument -w "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" \
     > "$INSTR_LOG" 2>&1 || true
+  log "仪器测试结束，判定结果"
   grep -a -E "OK \(|OK$|FAILURES|Tests run:|INSTRUMENTATION_RESULT" "$INSTR_LOG" || true
   if grep -aq "FAILURES" "$INSTR_LOG" \
     || grep -aq "Process crashed" "$INSTR_LOG"; then
     echo "::error::仪器测试存在失败（详见 tv-test-report-api34 中的 am-instrument.log）"
     FAIL=1
   elif ! grep -aqE "OK \([0-9]+ tests\)|OK[[:space:]]*$" "$INSTR_LOG"; then
-    echo "::error::仪器测试输出无成功标记（既无 OK 也无 FAILURES，疑似中断，取证见 am-instrument.log）"
+    echo "::error::仪器测试输出无成功标记（既无 OK 也无 FAILURES，疑似中断/超时，取证见 am-instrument.log）"
     FAIL=1
   fi
   # 原始输出随 artifact 上传（CI 失败时取证）
@@ -169,7 +188,7 @@ else
   fi
 fi
 
-echo "== P0 ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）=="
+log "== P0 ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）=="
 # 向 App 数据目录注入「计时中」状态，绕开 UI 操作。
 #
 # 历史教训（2026-11-05，P0 ⑧ 因此五轮 CI 从未真正验证，四个连续错误）：
@@ -227,28 +246,37 @@ fi
 # 启动一次让进程读取注入的状态（并清掉 stopped 标志，确保开机广播能送达）
 adb shell am start -n "$PKG/.MainActivity" || true
 sleep 5
+log "== 真实 adb reboot，等待重新启动（上限 6 分钟）=="
 adb reboot
-adb wait-for-device
-for i in $(seq 1 60); do
+# 不用 adb wait-for-device：设备不回时它是无限等（九跑 2 小时挂死嫌疑之一）。
+# 改用有界轮询 sys.boot_completed。
+BOOTED=0
+for i in $(seq 1 180); do
   if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then
+    BOOTED=1
     break
   fi
   sleep 2
 done
-# BootReceiver 收到 BOOT_COMPLETED 后应重新拉起 LockService
-FOUND=0
-for i in $(seq 1 30); do
-  if adb shell dumpsys activity services "$PKG" | grep -q LockService; then
-    FOUND=1
-    break
-  fi
-  sleep 2
-done
-if [ "$FOUND" = "1" ]; then
-  echo "重启后计时服务已恢复"
-else
-  echo "::error::重启后 LockService 未恢复"
+if [ "$BOOTED" != "1" ]; then
+  echo "::error::reboot 后 6 分钟内未完成启动"
   FAIL=1
+else
+  # BootReceiver 收到 BOOT_COMPLETED 后应重新拉起 LockService
+  FOUND=0
+  for i in $(seq 1 30); do
+    if adb shell dumpsys activity services "$PKG" | grep -q LockService; then
+      FOUND=1
+      break
+    fi
+    sleep 2
+  done
+  if [ "$FOUND" = "1" ]; then
+    echo "重启后计时服务已恢复"
+  else
+    echo "::error::重启后 LockService 未恢复"
+    FAIL=1
+  fi
 fi
 
 if [ "$FAIL" != "0" ]; then
@@ -256,4 +284,4 @@ if [ "$FAIL" != "0" ]; then
   exit 1
 fi
 
-echo "== 全部通过 =="
+log "== 全部通过 =="
