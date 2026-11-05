@@ -15,29 +15,97 @@
 set -euo pipefail
 
 PKG=com.quizgate.tv
+TEST_PKG="$PKG.test"
 
-echo "== 安装 App 与仪器测试 APK =="
-# API 34（Android 14）TV 镜像上 installDebug 连续多轮报
-# ddmlib ShellCommandUnresponsiveException（adb shell pm install 无响应，
-# 4-5 分钟后超时），API 28/30 同配置正常——镜像相关系统性问题。
-# 对策：最多 3 次尝试，每次失败先重启 adb server 清掉僵死连接再重试。
-INSTALL_OK=0
-for i in 1 2 3; do
-  if ./gradlew installDebug installDebugAndroidTest --no-daemon; then
-    INSTALL_OK=1
-    break
-  fi
-  echo "::warning::安装失败（第 $i 次），重启 adb server 后重试"
-  adb kill-server || true
-  sleep 5
-  adb start-server || true
-  adb wait-for-device || true
-  sleep 10
+echo "== 等待 adb 连接稳定 =="
+# API 34 TV 镜像实测（2026-11-05 八跑日志）：emulator 报 boot completed
+# 之后，adb 仍持续 "device offline" 抖动近 20 秒（settings put 连续
+# 失败 3 次才恢复）。不稳定的 adb 通道会让 ddmlib 的持久 shell 安装
+# 无响应（ShellCommandUnresponsiveException）。先过稳定性闸门再干活。
+STABLE=0
+for round in $(seq 1 30); do
+  OK=1
+  for probe in 1 2 3; do
+    if ! adb shell echo ok >/dev/null 2>&1; then OK=0; break; fi
+    sleep 1
+  done
+  if [ "$OK" = "1" ]; then STABLE=1; break; fi
+  echo "::warning::adb 第 $round 轮探测仍不稳定，尝试 reconnect"
+  adb reconnect offline 2>/dev/null || adb reconnect 2>/dev/null || true
+  sleep 3
 done
-if [ "$INSTALL_OK" != "1" ]; then
-  echo "::error::安装 App 与仪器测试 APK 三次均失败"
+if [ "$STABLE" != "1" ]; then
+  echo "::error::adb 连接 30 轮探测后仍不稳定，放弃"
   adb exec-out screencap -p > tv-failure.png || true
   exit 1
+fi
+echo "adb 连接稳定"
+
+# 按设备 SDK 选择安装/测试通道：
+#   API 28/30 → gradle（ddmlib）通道：连续多轮全绿，保持不动；
+#   API 34   → CLI 通道（adb install + am instrument）。
+# 为什么 API 34 换通道：该镜像（system-images;android-34;android-tv;x86，
+# 32 位）上 gradle installDebug 的 ddmlib pm install 连续 6 轮无响应
+# （二跑至八跑，每次 4-5 分钟超时），adb server 重启×3 重试也无效——
+# 不是偶发抖动，是 ddmlib 持久 shell 在该镜像上不可用。
+# adb install / am instrument 走短连接 CLI 通道，绕开 ddmlib。
+SDK=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+case "$SDK" in ''|*[!0-9]*) SDK=0 ;; esac
+CLI_MODE=0
+if [ "$SDK" -ge 34 ]; then CLI_MODE=1; fi
+if [ "$CLI_MODE" = "1" ]; then
+  echo "设备 API level: $SDK，安装/测试通道：CLI（adb install + am instrument）"
+else
+  echo "设备 API level: $SDK，安装/测试通道：gradle/ddmlib"
+fi
+
+install_app() {
+  # 只装 app APK（P0 ⑧ 兜底重装用）；CLI 模式下 APK 须已构建
+  if [ "$CLI_MODE" = "1" ]; then
+    adb install -r -t app/build/outputs/apk/debug/app-debug.apk
+  else
+    ./gradlew installDebug --no-daemon
+  fi
+}
+
+echo "== 安装 App 与仪器测试 APK =="
+if [ "$CLI_MODE" = "1" ]; then
+  ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
+  INSTALL_OK=0
+  for i in 1 2 3; do
+    if adb install -r -t app/build/outputs/apk/debug/app-debug.apk \
+      && adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; then
+      INSTALL_OK=1
+      break
+    fi
+    echo "::warning::adb install 失败（第 $i 次），重试"
+    sleep 5
+  done
+  if [ "$INSTALL_OK" != "1" ]; then
+    echo "::error::adb install 三次均失败"
+    adb exec-out screencap -p > tv-failure.png || true
+    exit 1
+  fi
+else
+  # API 34 之外的镜像 ddmlib 通道正常；保留 3 次重试作为偶发抖动对策
+  INSTALL_OK=0
+  for i in 1 2 3; do
+    if ./gradlew installDebug installDebugAndroidTest --no-daemon; then
+      INSTALL_OK=1
+      break
+    fi
+    echo "::warning::安装失败（第 $i 次），重启 adb server 后重试"
+    adb kill-server || true
+    sleep 5
+    adb start-server || true
+    adb wait-for-device || true
+    sleep 10
+  done
+  if [ "$INSTALL_OK" != "1" ]; then
+    echo "::error::安装 App 与仪器测试 APK 三次均失败"
+    adb exec-out screencap -p > tv-failure.png || true
+    exit 1
+  fi
 fi
 
 echo "== 授予仪器测试依赖的权限 =="
@@ -64,11 +132,41 @@ FAIL=0
 
 
 echo "== 单元测试 + 仪器测试 =="
-if ./gradlew testDebugUnitTest connectedCheck --no-daemon; then
-  echo "测试全部通过"
+if [ "$CLI_MODE" = "1" ]; then
+  # 单元测试：本地 JVM，照走 gradle
+  if ! ./gradlew testDebugUnitTest --no-daemon; then
+    echo "::error::单元测试失败"
+    FAIL=1
+  fi
+  # 仪器测试：am instrument 直连（不经过 ddmlib）。
+  # 输出格式已查证（AOSP 官方文档 + 第三方设备农场 CI 实践）：
+  #   AndroidJUnitRunner 全绿 → 打印 OK（标准格式 "OK (n tests)"）；
+  #   有失败 → 打印 FAILURES!!!；进程被杀 → "Process crashed"。
+  # 不用退出码判定：adb shell 连接关闭时会返回伪 255（protocol fault），
+  # 会把全绿误判成失败。
+  INSTR_LOG=$(mktemp)
+  adb shell am instrument -w "$TEST_PKG/androidx.test.runner.AndroidJUnitRunner" \
+    > "$INSTR_LOG" 2>&1 || true
+  grep -a -E "OK \(|OK$|FAILURES|Tests run:|INSTRUMENTATION_RESULT" "$INSTR_LOG" || true
+  if grep -aq "FAILURES" "$INSTR_LOG" \
+    || grep -aq "Process crashed" "$INSTR_LOG"; then
+    echo "::error::仪器测试存在失败（详见 tv-test-report-api34 中的 am-instrument.log）"
+    FAIL=1
+  elif ! grep -aqE "OK \([0-9]+ tests\)|OK[[:space:]]*$" "$INSTR_LOG"; then
+    echo "::error::仪器测试输出无成功标记（既无 OK 也无 FAILURES，疑似中断，取证见 am-instrument.log）"
+    FAIL=1
+  fi
+  # 原始输出随 artifact 上传（CI 失败时取证）
+  mkdir -p app/build/outputs/androidTest-results
+  cp "$INSTR_LOG" app/build/outputs/androidTest-results/am-instrument.log
+  rm -f "$INSTR_LOG"
 else
-  echo "::error::测试存在失败"
-  FAIL=1
+  if ./gradlew testDebugUnitTest connectedCheck --no-daemon; then
+    echo "测试全部通过"
+  else
+    echo "::error::测试存在失败"
+    FAIL=1
+  fi
 fi
 
 echo "== P0 ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）=="
@@ -89,7 +187,7 @@ echo "== P0 ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）=="
 adb shell am force-stop "$PKG" || true
 if ! adb shell pm path "$PKG" >/dev/null 2>&1; then
   echo "::warning::设备上没有 app（AGP 测试后卸载？），重装后继续"
-  ./gradlew installDebug --no-daemon || true
+  install_app || true
 fi
 if ! adb shell pm path "$PKG" >/dev/null 2>&1; then
   echo "::error::app 不在设备上且重装失败，P0 ⑧ 无法继续"
