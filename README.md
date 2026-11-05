@@ -6,7 +6,7 @@
 - 交互：纯遥控器 D-pad 操作，无需触屏
 - 依赖：零第三方库，`org.json` 用系统内置，最大兼容老旧电视 ROM
 - 构建：GitHub Actions 云构建，本地无需 Android 开发环境
-- 测试：GitHub Actions 跑**真实 Android TV 系统镜像**（API 30/34）+ Espresso 仪器测试，无需真机
+- 测试：GitHub Actions 跑**真实 Android TV 系统镜像**（API 28/30/34）+ Espresso 仪器测试，无需真机
 
 [![Build APK](https://github.com/guipi888/quizgate-tv/actions/workflows/build.yml/badge.svg)](https://github.com/guipi888/quizgate-tv/actions/workflows/build.yml)
 [![TV Test](https://github.com/guipi888/quizgate-tv/actions/workflows/tv-test.yml/badge.svg)](https://github.com/guipi888/quizgate-tv/actions/workflows/tv-test.yml)
@@ -122,15 +122,15 @@ adb install quizgate-tv-debug.apk
 
 ### 1.7.2 自动化测试（真实 Android TV 镜像，无需真机）
 
-`tv-test.yml` 工作流在 GitHub Actions 上启动**真实 Android TV 系统镜像**（matrix：API 30 × API 34），跑三层验证：
+`tv-test.yml` 工作流在 GitHub Actions 上启动**真实 Android TV 系统镜像**（matrix：API 28 × API 30 × API 34），跑三层验证：
 
 | 层 | 内容 |
 |---|---|
 | 单元测试（JVM） | 题型引擎、题库解析、连对/解锁规则（`app/src/test/`） |
 | 仪器测试（Espresso） | 设置页、锁屏页、PIN 键盘、自定义时长、倒计时到期、恢复广播（`app/src/androidTest/`） |
-| 端到端（adb） | TV 桌面可见性、U 盘题库导入（分区存储边界降级断言）、真实 `adb reboot` 后的开机恢复 |
+| 端到端（adb） | TV 桌面可见性、U 盘题库导入（API 28 走可读正向断言，API 29+ 走分区存储降级断言）、真实 `adb reboot` 后的开机恢复 |
 
-对本地无电视硬件的开发者，这是验证 P0 行为（前台服务、通知、悬浮窗拉起、重启恢复）最接近真机的免费方案。仪器测试通过与 App 同进程的反射读取答题引擎，确定性点击「正确选项」，不依赖 OCR 或穷举。
+API 28 是产品声称支持 U 盘导入的最低系统，CI 必须覆盖它——否则「支持到 Android 9」只是无测试背书的声明。对本地无电视硬件的开发者，这是验证 P0 行为（前台服务、通知、悬浮窗拉起、重启恢复）最接近真机的免费方案。仪器测试通过与 App 同进程的反射读取答题引擎，确定性点击「正确选项」，不依赖 OCR 或穷举。
 
 ### 1.7.3 本地构建
 
@@ -162,4 +162,5 @@ Release 签名：在 `gradle.properties` 或环境变量提供 `KEYSTORE_FILE` /
 |------|------|------------|--------|
 | v1.0 | 2026-11-02 | 创建项目：锁屏内核 + 三题型引擎 + U 盘题库导入 + 云构建流水线 | 桂皮 |
 | v1.1 | 2026-11-05 | TV 仿真测试流水线（API 30/34 × android-tv × Espresso）；修复 PIN 按钮不显示、自定义时长对话框、确认新 PIN 标题错显、题库重复扫描；新增 Android 13+ 前台服务/通知权限适配 | 桂皮 |
-| v1.2 | 2026-11-05 | 修复 CI 首跑暴露的 4 类问题：锁屏测试未进锁屏态即启动（Activity 自毁 NPE）、Espresso scrollTo 在 TV 模拟器不可用（改真实滑动手势）、UI 读取线程竞态、U 盘导入存储边界纠正（实为 Android 10+/API 29+ 分区存储，非 13+）；新增 canonical 去重 JVM 回归测试 | 桂皮 |
+| v1.2 | 2026-11-05 | 修复 CI 首跑暴露的 4 类问题：锁屏测试未进锁屏态即启动（Activity 自毁 NPE）、Espresso scrollTo 在 TV 模拟器不可用（初版改真实滑动手势）、UI 读取线程竞态、U 盘导入存储边界纠正（实为 Android 10+/API 29+ 分区存储，非 13+）；新增 canonical 去重 JVM 回归测试 | 桂皮 |
+| v1.3 | 2026-11-05 | 修复 CI 二跑暴露的 3 类问题：① TV 镜像为 no-touch 设备（`hw.screen=no-touch`），注入的 MOVE 事件滚不动 ScrollView，clickAfterScroll 改**焦点滚动**（`requestChildFocus` → `ScrollView.scrollToChild`，与真实用户 D-pad 导航同路径），滑动仅作兜底；② 锁屏页布局在 1080p（960×540dp）上溢出约 13dp，「家长解锁」按钮被裁——真实用户同样点不到，属产品缺陷，已包 ScrollView + 收紧题干/选项尺寸；③ `tv-e2e.sh` 的 run-as 单引号被本地 shell 剥掉，重定向落到设备端 CWD=/，**P0 ⑧ 重启恢复两轮 CI 都从未真正验证过**，已修引号并先 force-stop 再注入 prefs；另新增 API 28 job 覆盖 U 盘导入正向分支，`judge()` 越界「忽略」语义补文档（锁屏路径抛异常＝门禁被绕过，比忽略危险） | 桂皮 |

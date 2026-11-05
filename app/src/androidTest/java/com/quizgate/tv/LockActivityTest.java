@@ -168,7 +168,9 @@ public class LockActivityTest {
     @Test
     public void parentPinUnlock() {
         launchLock();
-        onView(withId(R.id.btn_parent_unlock)).perform(click());
+        // 1080p 视口 540dp，长题干（两行）会把「家长解锁」挤到折叠外，
+        // 与设置页统一走焦点滚动（见 TestSupport.clickAfterScroll）
+        TestSupport.clickAfterScroll(R.id.btn_parent_unlock);
         onView(withId(R.id.tv_pin_title))
                 .check(matches(withText("家长解锁：请输入 PIN")));
 

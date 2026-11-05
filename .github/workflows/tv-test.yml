@@ -14,10 +14,18 @@ jobs:
     name: Android TV · API ${{ matrix.api-level }}
     runs-on: ubuntu-latest
     strategy:
-      # 两个系统版本都跑完，结果互不影响
+      # 三个系统版本都跑完，结果互不影响（fail-fast: false）
       fail-fast: false
       matrix:
         include:
+          # Android 9：产品声称支持 U 盘导入的最低系统（README 已知限制）。
+          # 该版本无分区存储，配合 tv-e2e.sh 的 pm grant READ_EXTERNAL_STORAGE
+          # （manifest maxSdkVersion=32 覆盖），/sdcard/QuizGate 样本真实可读，
+          # UsbBankImportTest 走「可读」正向分支——canonical 去重、恰好入库一次、
+          # 计入总量在真实文件上得到验证（API 29+ 只有 JVM 单测 BankLoaderTest 守护）。
+          # 没有这个 job，「支持到 Android 9」就只是一句无测试背书的声明。
+          - api-level: "28"
+            arch: x86
           # Android 11：现代电视盒子基线系统。
           # U 盘题库导入说明（2026-11-05 CI 实测）：targetSdk 33 在 API 29+
           # 设备上受分区存储约束，File 路径读 /sdcard/QuizGate 不可用

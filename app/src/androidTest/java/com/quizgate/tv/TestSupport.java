@@ -9,12 +9,18 @@ import android.graphics.drawable.Drawable;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.UiController;
+import androidx.test.espresso.ViewAction;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.UiDevice;
 
+import org.hamcrest.Matcher;
 import org.junit.Assert;
 
 import java.lang.reflect.Field;
@@ -26,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayingAtLeast;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
@@ -290,12 +297,16 @@ public final class TestSupport {
      * 滚动后依然抛 "Scrolling to view was attempted, but the view is not
      * displayed"（2026-11-05 CI API 30/34 实测：requestRectangleOnScreen
      * 返回 true，但 isDisplayingAtLeast(90) 复检仍不满足）。
-     * 这里改用 UiDevice 注入真实滑动手势——与用户在电视上的操作一致，
-     * 也顺带验证 ScrollView 在产品环境里真的滚得动
-     * （P0 ②「开始计时」在长设置页中的可达性防线）。
+     * 为什么 UiDevice.swipe 只是兜底：tv_1080p 是 no-touch 设备
+     * （hw.screen=no-touch），注入的 MOVE 事件在 TV 镜像上滚不动 ScrollView
+     * （同一轮 CI 实测：连滑 4 次后复检仍 <90% 可见）。
+     * 主方案是焦点滚动：直接调用滚动容器的 requestChildFocus()，
+     * 内部走 ScrollView.scrollToChild()——与真实用户用遥控器 D-pad
+     * 导航时「焦点自动滚进可见区」是同一条代码路径，不依赖输入注入，
+     * 对触摸/非触摸设备都确定有效。
      */
     public static void clickAfterScroll(final int viewId) {
-        // 已可见时（大屏一屏放得下）直接点，无需滚动
+        // 已可见时（一屏放得下）直接点，无需滚动
         try {
             onView(withId(viewId)).perform(click());
             return;
@@ -303,18 +314,62 @@ public final class TestSupport {
             // 落入滚动分支
         }
 
-        UiDevice device = UiDevice.getInstance(
-                InstrumentationRegistry.getInstrumentation());
-        int width = device.getDisplayWidth();
-        int height = device.getDisplayHeight();
-        int x = width / 2;
-        int from = height * 3 / 4;
-        int to = height / 4;
-        for (int i = 0; i < 4 && !isDisplayed(viewId); i++) {
-            device.swipe(x, from, x, to, 30);
-            sleep(300);
+        scrollIntoView(viewId);
+
+        // requestChildFocus 可能延迟到下一帧布局，轮询复检
+        for (int i = 0; i < 25 && !isDisplayed(viewId); i++) {
+            sleep(100);
         }
+
+        // 兜底：焦点滚动未生效时（如容器不支持），再注入真实滑动手势
+        if (!isDisplayed(viewId)) {
+            UiDevice device = UiDevice.getInstance(
+                    InstrumentationRegistry.getInstrumentation());
+            int width = device.getDisplayWidth();
+            int height = device.getDisplayHeight();
+            int x = width / 2;
+            int from = height * 3 / 4;
+            int to = height / 4;
+            for (int i = 0; i < 4 && !isDisplayed(viewId); i++) {
+                device.swipe(x, from, x, to, 30);
+                sleep(300);
+            }
+        }
+
         // 仍不可见时让 Espresso 给出明确的失败信息
         onView(withId(viewId)).perform(click());
+    }
+
+    /**
+     * 把目标视图滚进最近的滚动容器可见区。
+     * ViewAction 保证 perform 在主线程执行；requestChildFocus 会触发
+     * ScrollView.scrollToChild()（布局干净时立即滚动，否则延迟到
+     * 下一次 onLayout，由调用方的轮询复检覆盖）。
+     */
+    private static void scrollIntoView(final int viewId) {
+        onView(withId(viewId)).perform(new ViewAction() {
+            @Override
+            public Matcher<View> getConstraints() {
+                return isAssignableFrom(View.class);
+            }
+
+            @Override
+            public String getDescription() {
+                return "scroll into view via requestChildFocus";
+            }
+
+            @Override
+            public void perform(UiController uiController, View view) {
+                // 向上找最近的滚动容器（本项目布局均为 android.widget.ScrollView；
+                // 不依赖 androidx.core，主代码零第三方依赖的原则保持一致）
+                ViewParent p = view.getParent();
+                while (p != null && !(p instanceof ScrollView)) {
+                    p = p.getParent();
+                }
+                if (p instanceof ViewGroup) {
+                    ((ViewGroup) p).requestChildFocus(view, view);
+                }
+            }
+        });
     }
 }

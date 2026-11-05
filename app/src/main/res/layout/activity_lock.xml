@@ -1,112 +1,126 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  锁屏答题页。2026-11-05 CI 实测：1080p 电视（tv_1080p, 1920x1080 @ 320dpi
+  = 960x540dp）上原布局内容约 553dp 超出视口，「家长解锁」按钮被裁掉——
+  真实用户同样点不到，属产品缺陷而非测试问题。现包一层 ScrollView
+  （fillViewport 保证内容不足时仍居中），并收紧题干/选项尺寸，
+  使单行题干恰好放得下（约 511dp），长题干（题库题可能两行）可滚动。
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="32dp">
+    android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/tv_lock_title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="观看时间到"
-        android:textColor="@color/accent"
-        android:textSize="34sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/tv_lock_progress"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:textColor="@color/text_secondary"
-        android:textSize="20sp" />
-
-    <TextView
-        android:id="@+id/tv_lock_prompt"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
-        android:layout_marginBottom="28dp"
+        android:background="@color/bg"
         android:gravity="center"
-        android:textColor="@color/text"
-        android:textSize="64sp"
-        android:textStyle="bold" />
+        android:orientation="vertical"
+        android:padding="32dp">
 
-    <TextView
-        android:id="@+id/tv_lock_empty"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
-        android:layout_marginBottom="28dp"
-        android:gravity="center"
-        android:text="题库为空，请家长在设置页导入题库（U 盘 QuizGate/banks/）后重试"
-        android:textColor="@color/wrong"
-        android:textSize="22sp"
-        android:visibility="gone" />
+        <TextView
+            android:id="@+id/tv_lock_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="观看时间到"
+            android:textColor="@color/accent"
+            android:textSize="34sp"
+            android:textStyle="bold" />
 
-    <GridLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:columnCount="2"
-        android:rowCount="2">
+        <TextView
+            android:id="@+id/tv_lock_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="20sp" />
+
+        <TextView
+            android:id="@+id/tv_lock_prompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="20dp"
+            android:gravity="center"
+            android:textColor="@color/text"
+            android:textSize="56sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_lock_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="20dp"
+            android:gravity="center"
+            android:text="题库为空，请家长在设置页导入题库（U 盘 QuizGate/banks/）后重试"
+            android:textColor="@color/wrong"
+            android:textSize="22sp"
+            android:visibility="gone" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2"
+            android:rowCount="2">
+
+            <Button
+                android:id="@+id/btn_opt0"
+                tools:runtimeText="true"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
+                android:background="@drawable/bg_option"
+                android:textColor="@color/text"
+                android:textSize="26sp" />
+
+            <Button
+                android:id="@+id/btn_opt1"
+                tools:runtimeText="true"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
+                android:background="@drawable/bg_option"
+                android:textColor="@color/text"
+                android:textSize="26sp" />
+
+            <Button
+                android:id="@+id/btn_opt2"
+                tools:runtimeText="true"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
+                android:background="@drawable/bg_option"
+                android:textColor="@color/text"
+                android:textSize="26sp" />
+
+            <Button
+                android:id="@+id/btn_opt3"
+                tools:runtimeText="true"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_columnWeight="1"
+                android:layout_margin="8dp"
+                android:background="@drawable/bg_option"
+                android:textColor="@color/text"
+                android:textSize="26sp" />
+        </GridLayout>
 
         <Button
-            android:id="@+id/btn_opt0"
-            tools:runtimeText="true"
-            android:layout_width="0dp"
-            android:layout_height="84dp"
-            android:layout_columnWeight="1"
-            android:layout_margin="8dp"
-            android:background="@drawable/bg_option"
-            android:textColor="@color/text"
-            android:textSize="26sp" />
-
-        <Button
-            android:id="@+id/btn_opt1"
-            tools:runtimeText="true"
-            android:layout_width="0dp"
-            android:layout_height="84dp"
-            android:layout_columnWeight="1"
-            android:layout_margin="8dp"
-            android:background="@drawable/bg_option"
-            android:textColor="@color/text"
-            android:textSize="26sp" />
-
-        <Button
-            android:id="@+id/btn_opt2"
-            tools:runtimeText="true"
-            android:layout_width="0dp"
-            android:layout_height="84dp"
-            android:layout_columnWeight="1"
-            android:layout_margin="8dp"
-            android:background="@drawable/bg_option"
-            android:textColor="@color/text"
-            android:textSize="26sp" />
-
-        <Button
-            android:id="@+id/btn_opt3"
-            tools:runtimeText="true"
-            android:layout_width="0dp"
-            android:layout_height="84dp"
-            android:layout_columnWeight="1"
-            android:layout_margin="8dp"
-            android:background="@drawable/bg_option"
-            android:textColor="@color/text"
-            android:textSize="26sp" />
-    </GridLayout>
-
-    <Button
-        android:id="@+id/btn_parent_unlock"
-        android:layout_width="wrap_content"
-        android:layout_height="52dp"
-        android:layout_marginTop="32dp"
-        android:background="@drawable/bg_button_secondary"
-        android:minWidth="220dp"
-        android:text="家长解锁"
-        android:textColor="@color/accent"
-        android:textSize="20sp" />
-</LinearLayout>
+            android:id="@+id/btn_parent_unlock"
+            android:layout_width="wrap_content"
+            android:layout_height="52dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/bg_button_secondary"
+            android:minWidth="220dp"
+            android:text="家长解锁"
+            android:textColor="@color/accent"
+            android:textSize="20sp" />
+    </LinearLayout>
+</ScrollView>

@@ -112,7 +112,14 @@ public class QuizEngine {
         return 3;
     }
 
-    /** 判定作答：对返回 true 并 streak+1；错返回 false 且 streak 归零。 */
+    /**
+     * 判定作答：对返回 true 并 streak+1；错返回 false 且 streak 归零。
+     * 越界下标（Question 恒为 4 选项，UI tag 恒为 0..3，越界只可能是代码 bug）：
+     * 返回 false 但不动 streak——「忽略」语义。
+     * 为什么不改为抛异常：本方法在锁屏门禁的核心路径上，抛异常会直接崩溃
+     * 锁屏页＝门禁被绕过；忽略一次非法输入零代价（既判不了对也清不了零）。
+     * current 为 null（尚未抽题）同理忽略，由 QuizEngineTest 锁定该语义。
+     */
     public boolean judge(int optionIndex) {
         if (current == null || optionIndex < 0 || optionIndex > 3) {
             return false;
