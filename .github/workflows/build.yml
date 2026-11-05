@@ -34,7 +34,9 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, "refs/tags/v")
+    # 注意：表达式内含引号时，整个 if 值必须加双引号、内部用单引号，
+    # 否则 GitHub 表达式解析器报 Unexpected symbol（工作流直接 0 job 失败）
+    if: "startsWith(github.ref, 'refs/tags/v')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
