@@ -90,7 +90,12 @@ public class MainActivityTest {
         assertTrue("计时标记应置位", p.isTimerRunning());
         assertTrue("应有剩余时间", p.remainingMillis() > 0);
 
-        TestSupport.waitUntil("前台计时通知", 8000, new TestSupport.Condition() {
+        // 20 秒而非 8 秒：十跑 API 34 上 8 秒超时失败，而同样等通知的
+        // BootRestoreTest（20 秒窗口）通过——API 34 软渲染负载下 FGS
+        // 通知出现慢于 28/30。20s 是已通过的同族测试实测窗口；
+        // 若仍超时，TestSupport.waitUntil 的失败诊断会转储活跃通知
+        // 清单 + LockService 运行态，直接分辨「太紧」还是「没起来」。
+        TestSupport.waitUntil("前台计时通知", 20000, new TestSupport.Condition() {
             @Override
             public boolean test() {
                 return TestSupport.hasTimerNotification();

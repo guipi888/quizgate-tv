@@ -1,6 +1,7 @@
 package com.quizgate.tv;
 
 import android.app.Activity;
+import android.app.Notification;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
@@ -148,7 +149,57 @@ public final class TestSupport {
             }
             sleep(80);
         }
-        Assert.fail("等待超时：" + what);
+        Assert.fail("等待超时：" + what + dumpDiagnostics());
+    }
+
+    /**
+     * 轮询超时时的失败现场取证。
+     *
+     * 背景（2026-11-05 十跑，API 34 首次跑到测试段）：
+     * startTimerStartsForegroundService 等「前台计时通知」8 秒超时失败，
+     * 但同样等通知的 BootRestoreTest（20 秒窗口、广播路径）通过——
+     * 无法从外部区分是「8 秒窗口在 API 34 软渲染负载下太紧」还是
+     * 「UI 路径 startForegroundService 抛异常被 catch 转 Toast」。
+     * 转储活跃通知清单 + LockService 运行态 + 计时状态，一次跑分辨两说。
+     */
+    private static String dumpDiagnostics() {
+        StringBuilder sb = new StringBuilder("\n[诊断]");
+        try {
+            sb.append(" SDK=").append(android.os.Build.VERSION.SDK_INT);
+            PrefManager p = prefs();
+            sb.append(" timerRunning=").append(p.isTimerRunning())
+                    .append(" lockActive=").append(p.isLockActive())
+                    .append(" remaining=").append(p.remainingMillis());
+            android.app.ActivityManager am = (android.app.ActivityManager) ctx()
+                    .getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) {
+                boolean svcRunning = false;
+                for (android.app.ActivityManager.RunningServiceInfo info
+                        : am.getRunningServices(50)) {
+                    if (LockService.class.getName().equals(info.service.getClassName())) {
+                        svcRunning = true;
+                        break;
+                    }
+                }
+                sb.append(" LockServiceRunning=").append(svcRunning);
+            }
+            NotificationManager nm = (NotificationManager) ctx()
+                    .getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                sb.append(" areNotificationsEnabled=").append(nm.areNotificationsEnabled());
+                StatusBarNotification[] actives = nm.getActiveNotifications();
+                sb.append(" activeNotifications=").append(actives.length);
+                for (StatusBarNotification sbn : actives) {
+                    sb.append("\n  [通知] id=").append(sbn.getId())
+                            .append(" channel=").append(sbn.getNotification().getChannelId())
+                            .append(" ongoing=").append(
+                                    (sbn.getNotification().flags & Notification.FLAG_ONGOING_EVENT) != 0);
+                }
+            }
+        } catch (Exception e) {
+            sb.append(" 采集失败: ").append(e);
+        }
+        return sb.toString();
     }
 
     /**
