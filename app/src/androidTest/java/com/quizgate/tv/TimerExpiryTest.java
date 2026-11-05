@@ -54,9 +54,9 @@ public class TimerExpiryTest {
                 TestSupport.canDrawOverlays());
 
         scenario = ActivityScenario.launch(MainActivity.class);
-        // 「开始计时」在 ScrollView 一屏外；clickAfterScroll 用
-        // requestRectangleOnScreen(rect, true) 同步把它滚进可见区域
-        // （immediate=false 的动画滚动在 TV 模拟器上复检必败，见 TestSupport）
+        // 「开始计时」在 ScrollView 一屏外；clickAfterScroll 直接定位
+        // ScrollView 手算 scrollTo 把它滚进可见区域（动画滚动/焦点滚动
+        // 在 TV 模拟器上均实证无效，见 TestSupport 注释）
         TestSupport.clickAfterScroll(R.id.btn_start_timer);
 
         // 1 分钟倒计时 + 服务每秒轮询的余量

@@ -8,7 +8,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
-import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewParent;
 import android.widget.ScrollView;
@@ -278,12 +277,20 @@ public final class TestSupport {
 
     /**
      * 目标控件是否已在屏幕上充分显示（Espresso click 采用的 90% 标准）。
+     *
+     * 必须捕 Throwable：视图 <90% 可见时 Espresso 的
+     * check(matches(isDisplayingAtLeast(90))) 抛
+     * AssertionErrorHandler$AssertionFailedWithCauseError，它继承自
+     * org.junit.AssertionFailedError → java.lang.AssertionError →
+     * **java.lang.Error，不是 Exception**。catch (Exception) 捕不住它，
+     * 复检会在第一次调用时就炸穿整个 clickAfterScroll（2026-11-05 CI
+     * 四跑实证：滚动分支后的一切代码从未执行）。
      */
     public static boolean isDisplayed(final int viewId) {
         try {
             onView(withId(viewId)).check(matches(isDisplayingAtLeast(90)));
             return true;
-        } catch (Exception e) {
+        } catch (Throwable t) {
             return false;
         }
     }
@@ -293,21 +300,22 @@ public final class TestSupport {
      *
      * 为什么不用 Espresso 的 scrollTo()：ScrollToAction 调
      * View.requestRectangleOnScreen(rect, false)，immediate=false 时
-     * ScrollView.requestChildRectangleOnScreen 走的是 smoothScrollBy
+     * ScrollView.requestChildRectangleOnScreen 走 smoothScrollBy
      * 动画——perform 返回时动画还没跑，同帧的可见性复检必然失败
-     * （CI 首跑实测：抛 "Scrolling to view was attempted, but the view
-     * is not displayed"）。
+     * （CI 首跑实测）。
      * 为什么不用 requestChildFocus()：ScrollView.requestChildFocus 自
      * Android 9 起被 getRevealOnFocusHint() 把门，布局不设
-     * android:revealOnFocus 时它什么都不做（AOSP 源码 + 2026-11-05
-     * CI 实测：调用后按钮 y 坐标仍是 1709，ScrollView scrollY 未变）。
-     * 为什么 UiDevice.swipe 无效：tv_1080p 是 no-touch 设备
-     * （hw.screen=no-touch），注入的 MOVE 事件滚不动 ScrollView。
-     * 主方案是 requestRectangleOnScreen(rect, true)：immediate=true
-     * 时 ScrollView 走 scrollToChildRect → scrollBy 同步滚动，与真实
-     * 用户用遥控器 D-pad 导航时焦点滚进可见区是同一套系统路径
-     * （FocusFinder 找焦点 → requestFocus → requestRectangleOnScreen），
-     * 不依赖输入注入，对触摸/非触摸设备都确定有效。
+     * android:revealOnFocus 时它什么都不做（AOSP 源码 + CI 实测：
+     * 调用后按钮 y 坐标仍是 1709，scrollY 未变）。
+     * 为什么不用 requestRectangleOnScreen()：ViewGroup 的默认实现
+     * requestChildRectangleOnScreen 直接 return false、**不向父链冒泡**，
+     * view 的直接父是普通 LinearLayout 时请求断在中间层，ScrollView
+     * 从未被问到（AOSP ViewGroup 源码 + CI 四跑实证）。
+     * 主方案：直接定位最近 ScrollView 祖先，按屏幕坐标手算 scrollTo
+     * （maxScroll 用 ScrollView.onLayout 同款公式 clamp）。位置用
+     * getLocationOnScreen 实测，不依赖父子层级的 getTop() 累加。
+     * 滚动后仍不可见时 perform 内抛出带全部中间值的 RuntimeException，
+     * CI test report 堆栈直接可读，不再盲猜根因。
      */
     public static void clickAfterScroll(final int viewId) {
         // 已可见时（一屏放得下）直接点，无需滚动
@@ -315,13 +323,13 @@ public final class TestSupport {
             onView(withId(viewId)).perform(click());
             return;
         } catch (Exception notDisplayed) {
-            // 落入滚动分支
+            // 落入滚动分支（click 的约束失败是 PerformException，Exception 子类）
         }
 
         scrollIntoView(viewId);
 
-        // scrollBy 是同步的，但布局可能延迟到下一帧，留轮询复检的余量
-        for (int i = 0; i < 25 && !isDisplayed(viewId); i++) {
+        // scrollTo 是同步的，留一小段轮询复检余量应对延迟布局
+        for (int i = 0; i < 10 && !isDisplayed(viewId); i++) {
             sleep(100);
         }
 
@@ -330,18 +338,14 @@ public final class TestSupport {
     }
 
     /**
-     * 把目标视图滚进最近的滚动容器可见区。
+     * 把目标视图滚进最近的 ScrollView 可见区。
      * ViewAction 保证 perform 在主线程执行。
      *
-     * 主路径：view.requestRectangleOnScreen(rect, true)。View 的实现会把
-     * 请求沿父链冒泡，最终到达 ScrollView.requestChildRectangleOnScreen
-     * → scrollToChildRect(rect, immediate=true) → scrollBy(0, delta)，
-     * delta 由 computeScrollDeltaToGetChildRectOnScreen 算出并自带 clamp，
-     * 不会滚过头。immediate=true 是关键：false 时走 smoothScrollBy 动画，
-     * 同帧复检看不到效果（Espresso scrollTo 的败因）。
-     *
-     * 兜底：requestRectangleOnScreen 返回 false（父链上没有容器处理）时，
-     * 直接找 ScrollView 手算 scrollBy。
+     * 手算坐标：view.getLocationOnScreen 拿实时屏幕位置，减 ScrollView
+     * 自身位置和 paddingTop 得到应设的 scrollY；maxScroll 与
+     * ScrollView.onLayout 的 scrollRange 公式一致
+     * （childHeight - (height - paddingTop - paddingBottom)），防止滚过头
+     * 把目标甩出屏幕顶部。滚动后复检目标仍不可见则抛诊断异常。
      */
     private static void scrollIntoView(final int viewId) {
         onView(withId(viewId)).perform(new ViewAction() {
@@ -352,47 +356,50 @@ public final class TestSupport {
 
             @Override
             public String getDescription() {
-                return "scroll into view via requestRectangleOnScreen";
+                return "scroll into view via direct scrollTo";
             }
 
             @Override
             public void perform(UiController uiController, View view) {
-                Rect rect = new Rect(0, 0, view.getWidth(), view.getHeight());
-                if (view.requestRectangleOnScreen(rect, true)) {
-                    return;
-                }
-
-                // 兜底：向上找最近的滚动容器（本项目布局均为
-                // android.widget.ScrollView；不依赖 androidx.core，主代码
-                // 零第三方依赖的原则保持一致）
                 ViewParent p = view.getParent();
                 while (p != null && !(p instanceof ScrollView)) {
                     p = p.getParent();
                 }
                 if (!(p instanceof ScrollView)) {
-                    return;
+                    throw new RuntimeException(
+                            "DIAG-scroll: view 上方找不到 ScrollView 祖先");
                 }
                 ScrollView sv = (ScrollView) p;
-                // view 当前顶部相对 ScrollView 视口顶部的位置（含滚动量换算）
                 int[] vLoc = new int[2];
                 int[] svLoc = new int[2];
                 view.getLocationOnScreen(vLoc);
                 sv.getLocationOnScreen(svLoc);
-                int delta = (vLoc[1] - svLoc[1]) - sv.getPaddingTop();
+                int padTop = sv.getPaddingTop();
                 View content = sv.getChildAt(0);
-                if (content != null) {
-                    int maxScroll = Math.max(0, content.getHeight()
-                            + sv.getPaddingTop() + sv.getPaddingBottom() - sv.getHeight());
-                    int want = sv.getScrollY() + delta;
-                    if (want > maxScroll) {
-                        want = maxScroll;
-                    }
-                    if (want < 0) {
-                        want = 0;
-                    }
-                    delta = want - sv.getScrollY();
+                int contentH = content == null ? -1 : content.getHeight();
+                int maxScroll = content == null ? 0
+                        : Math.max(0, contentH + padTop + sv.getPaddingBottom()
+                                - sv.getHeight());
+                int target = vLoc[1] - svLoc[1] - padTop;
+                if (target < 0) {
+                    target = 0;
                 }
-                sv.scrollBy(0, delta);
+                if (target > maxScroll) {
+                    target = maxScroll;
+                }
+                sv.scrollTo(0, target);
+                int after = sv.getScrollY();
+                int viewTopAfter = vLoc[1] - after;
+                int svBottom = svLoc[1] + sv.getHeight();
+                if (viewTopAfter + view.getHeight() / 2 > svBottom
+                        || viewTopAfter + view.getHeight() < svLoc[1] + padTop) {
+                    throw new RuntimeException("DIAG-scroll: 滚动后目标仍不可见"
+                            + " vLoc.y=" + vLoc[1] + " svLoc.y=" + svLoc[1]
+                            + " padTop=" + padTop + " svH=" + sv.getHeight()
+                            + " contentH=" + contentH + " maxScroll=" + maxScroll
+                            + " target=" + target + " scrollYAfter=" + after
+                            + " viewH=" + view.getHeight());
+                }
             }
         });
     }
