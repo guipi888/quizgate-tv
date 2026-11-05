@@ -13,21 +13,33 @@ import android.widget.TextView;
 
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.platform.app.InstrumentationRegistry;
+import androidx.test.uiautomator.UiDevice;
 
 import org.junit.Assert;
 
 import java.lang.reflect.Field;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayingAtLeast;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 /**
  * 仪器测试公共工具。
  *
- * 两个关键设计：
+ * 三个关键设计：
  * 1. 仪器测试与 App 跑在同一进程，可以反射读取 LockActivity 的私有 QuizEngine，
  *    从而"知道"每道题的正确答案，答题类断言才是确定性的（不靠 OCR 或穷举点击）；
  * 2. 状态准备/清理集中在 resetPrefs() + ensureNoLockActivity()，
- *    避免锁屏页（singleInstance）跨测试残留导致串扰。
+ *    避免锁屏页（singleInstance）跨测试残留导致串扰；
+ * 3. 所有跨线程 UI 读取（textOnUi/bgColorOnUi）必须等主线程真正执行完
+ *    Runnable 再取值——runOnUiThread 是异步 post，post 完立即读会拿到
+ *    初始值（null/-1），这是 CI 首跑暴露的竞态 bug。
  */
 public final class TestSupport {
 
@@ -134,35 +146,80 @@ public final class TestSupport {
         Assert.fail("等待超时：" + what);
     }
 
-    /** 在主线程读取 TextView 文本；视图不存在或已销毁时返回 null。 */
+    /**
+     * 在主线程读取 TextView 文本；视图不存在、已销毁或文本为空时返回 null。
+     *
+     * 实现要点：runOnUiThread 只是把 Runnable post 到主线程队列，
+     * post 完立刻读 box 会拿到 null（测试线程与主线程竞态）。
+     * 必须用 CountDownLatch 等主线程真正执行完再读；
+     * 文本由异步逻辑（onResume 的 refreshBankInfo 等）设置时还需轮询重试。
+     */
     public static String textOnUi(final Activity a, final int viewId) {
-        final String[] box = new String[1];
-        if (a != null) {
-            a.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    View v = a.findViewById(viewId);
-                    box[0] = v instanceof TextView ? String.valueOf(((TextView) v).getText()) : null;
-                }
-            });
-        }
-        return box[0];
+        return textOnUi(a, viewId, 2000);
     }
 
-    /** 读取视图背景色；非纯色背景（shape drawable）返回 -1。 */
-    public static int bgColorOnUi(final Activity a, final int viewId) {
-        final int[] box = {-1};
-        if (a != null) {
+    public static String textOnUi(final Activity a, final int viewId, long timeoutMs) {
+        if (a == null) {
+            return null;
+        }
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (true) {
+            final String[] box = new String[1];
+            final CountDownLatch latch = new CountDownLatch(1);
             a.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
+                    try {
+                        View v = a.findViewById(viewId);
+                        box[0] = v instanceof TextView
+                                ? String.valueOf(((TextView) v).getText()) : null;
+                    } finally {
+                        latch.countDown();
+                    }
+                }
+            });
+            try {
+                latch.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+            if (box[0] != null && !box[0].isEmpty()) {
+                return box[0];
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                return box[0];
+            }
+            sleep(50);
+        }
+    }
+
+    /** 读取视图背景色；非纯色背景（shape drawable）或视图不存在返回 -1。 */
+    public static int bgColorOnUi(final Activity a, final int viewId) {
+        if (a == null) {
+            return -1;
+        }
+        final int[] box = {-1};
+        final CountDownLatch latch = new CountDownLatch(1);
+        a.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
                     View v = a.findViewById(viewId);
                     Drawable d = v == null ? null : v.getBackground();
                     if (d instanceof ColorDrawable) {
                         box[0] = ((ColorDrawable) d).getColor();
                     }
+                } finally {
+                    latch.countDown();
                 }
-            });
+            }
+        });
+        try {
+            latch.await(2, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return -1;
         }
         return box[0];
     }
@@ -211,5 +268,53 @@ public final class TestSupport {
             ActivityScenario.launch(LockActivity.class).close();
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * 目标控件是否已在屏幕上充分显示（Espresso click 采用的 90% 标准）。
+     */
+    public static boolean isDisplayed(final int viewId) {
+        try {
+            onView(withId(viewId)).check(matches(isDisplayingAtLeast(90)));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 滚动到目标控件并点击。
+     *
+     * 为什么不用 Espresso 的 scrollTo()：ScrollToAction 依赖
+     * View.requestRectangleOnScreen() 让祖先容器滚动，在 Android TV 模拟器上
+     * 滚动后依然抛 "Scrolling to view was attempted, but the view is not
+     * displayed"（2026-11-05 CI API 30/34 实测：requestRectangleOnScreen
+     * 返回 true，但 isDisplayingAtLeast(90) 复检仍不满足）。
+     * 这里改用 UiDevice 注入真实滑动手势——与用户在电视上的操作一致，
+     * 也顺带验证 ScrollView 在产品环境里真的滚得动
+     * （P0 ②「开始计时」在长设置页中的可达性防线）。
+     */
+    public static void clickAfterScroll(final int viewId) {
+        // 已可见时（大屏一屏放得下）直接点，无需滚动
+        try {
+            onView(withId(viewId)).perform(click());
+            return;
+        } catch (Exception notDisplayed) {
+            // 落入滚动分支
+        }
+
+        UiDevice device = UiDevice.getInstance(
+                InstrumentationRegistry.getInstrumentation());
+        int width = device.getDisplayWidth();
+        int height = device.getDisplayHeight();
+        int x = width / 2;
+        int from = height * 3 / 4;
+        int to = height / 4;
+        for (int i = 0; i < 4 && !isDisplayed(viewId); i++) {
+            device.swipe(x, from, x, to, 30);
+            sleep(300);
+        }
+        // 仍不可见时让 Espresso 给出明确的失败信息
+        onView(withId(viewId)).perform(click());
     }
 }

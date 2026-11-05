@@ -13,7 +13,6 @@ import org.junit.Test;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
@@ -55,7 +54,9 @@ public class TimerExpiryTest {
                 TestSupport.canDrawOverlays());
 
         scenario = ActivityScenario.launch(MainActivity.class);
-        onView(withId(R.id.btn_start_timer)).perform(scrollTo(), click());
+        // 「开始计时」在 ScrollView 一屏外；clickAfterScroll 用真实滑动手势
+        // 把它滚进可见区域（Espresso scrollTo 在 TV 模拟器上不可用，见 TestSupport）
+        TestSupport.clickAfterScroll(R.id.btn_start_timer);
 
         // 1 分钟倒计时 + 服务每秒轮询的余量
         UiDevice device = UiDevice.getInstance(

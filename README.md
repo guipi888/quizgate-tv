@@ -111,7 +111,7 @@ adb install quizgate-tv-debug.apk
 - Android 系统不允许第三方应用真正拦截 HOME 键，最强方案是「设为默认桌面」（设置页有引导）
 - 修改系统时间可能影响计时精度（计时用墙钟时间戳，改时间会提前或延后触发）
 - 防卸载需 Device Owner 权限（adb 一次性配置），未内置，见 Roadmap
-- **U 盘题库导入仅支持到 Android 12（API 32）**：`READ_EXTERNAL_STORAGE` 声明了 `maxSdkVersion="32"`，Android 13+ 不再申请存储权限，且系统已禁止应用直接读共享存储里的非媒体文件。Android 13+ 电视需要改用 SAF 目录选择或申请「所有文件访问权限」，见 Roadmap
+- **U 盘题库导入仅支持到 Android 9（API 28）**：2026-11-05 TV CI 在 API 30/34 真实镜像上实测确认，targetSdk 33 的应用在 API 29+ 设备上一律受分区存储约束（`requestLegacyExternalStorage` 只对 targetSdk 29 有效），无法用 File 路径直接读 U 盘 `QuizGate/banks/` 目录；此前「Android 13+ 才受限」的记录有误。Android 10+ 电视需要改用 SAF 目录选择或申请「所有文件访问权限」，见 Roadmap。CI 中该场景按「可读则正向断言 / 不可读则优雅降级」分配断，重复扫描回归防线由 JVM 单元测试守护
 - 本产品定位是「儿童抵抗」而非「安全防护」：能防住 10 岁以下孩子的大部分操作，防不住有心人
 
 ## 1.7 构建
@@ -128,7 +128,7 @@ adb install quizgate-tv-debug.apk
 |---|---|
 | 单元测试（JVM） | 题型引擎、题库解析、连对/解锁规则（`app/src/test/`） |
 | 仪器测试（Espresso） | 设置页、锁屏页、PIN 键盘、自定义时长、倒计时到期、恢复广播（`app/src/androidTest/`） |
-| 端到端（adb） | TV 桌面可见性、U 盘题库导入、真实 `adb reboot` 后的开机恢复 |
+| 端到端（adb） | TV 桌面可见性、U 盘题库导入（分区存储边界降级断言）、真实 `adb reboot` 后的开机恢复 |
 
 对本地无电视硬件的开发者，这是验证 P0 行为（前台服务、通知、悬浮窗拉起、重启恢复）最接近真机的免费方案。仪器测试通过与 App 同进程的反射读取答题引擎，确定性点击「正确选项」，不依赖 OCR 或穷举。
 
@@ -154,7 +154,7 @@ Release 签名：在 `gradle.properties` 或环境变量提供 `KEYSTORE_FILE` /
 - [ ] Device Owner 防卸载引导（adb 一次性配置）
 - [ ] 局域网手机端管理页（推题 / 看记录 / 临时放行）
 - [ ] 更多电视 ROM 适配实测（海信 / TCL / 当贝）
-- [ ] Android 13+ U 盘题库导入（SAF 目录选择或「所有文件访问」授权）
+- [ ] Android 10+（API 29+）U 盘题库导入（SAF 目录选择或「所有文件访问」授权）
 
 ## 📝 版本迭代记录
 
@@ -162,3 +162,4 @@ Release 签名：在 `gradle.properties` 或环境变量提供 `KEYSTORE_FILE` /
 |------|------|------------|--------|
 | v1.0 | 2026-11-02 | 创建项目：锁屏内核 + 三题型引擎 + U 盘题库导入 + 云构建流水线 | 桂皮 |
 | v1.1 | 2026-11-05 | TV 仿真测试流水线（API 30/34 × android-tv × Espresso）；修复 PIN 按钮不显示、自定义时长对话框、确认新 PIN 标题错显、题库重复扫描；新增 Android 13+ 前台服务/通知权限适配 | 桂皮 |
+| v1.2 | 2026-11-05 | 修复 CI 首跑暴露的 4 类问题：锁屏测试未进锁屏态即启动（Activity 自毁 NPE）、Espresso scrollTo 在 TV 模拟器不可用（改真实滑动手势）、UI 读取线程竞态、U 盘导入存储边界纠正（实为 Android 10+/API 29+ 分区存储，非 13+）；新增 canonical 去重 JVM 回归测试 | 桂皮 |

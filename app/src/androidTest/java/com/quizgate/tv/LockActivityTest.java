@@ -46,6 +46,11 @@ public class LockActivityTest {
     }
 
     private void launchLock() {
+        // LockActivity.onCreate/onResume 在未锁定时会直接 finish()——
+        // 不先进入锁屏态就启动，ActivityScenario 拿到的是已销毁的
+        // Activity，onActivity 回调抛 NPE（CI 首跑 5 个用例全灭于此）。
+        // enterLock() 即"计时到期进入锁屏"的真实状态。
+        TestSupport.prefs().enterLock();
         scenario = ActivityScenario.launch(LockActivity.class);
         scenario.onActivity(new ActivityScenario.ActivityAction<LockActivity>() {
             @Override

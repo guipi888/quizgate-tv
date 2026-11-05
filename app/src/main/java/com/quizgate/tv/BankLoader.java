@@ -116,8 +116,12 @@ public class BankLoader {
         return result;
     }
 
-    /** 规范化路径，用于去重；失败时退化为绝对路径（宁可重复也不漏扫）。 */
-    private static String canonical(File f) {
+    /**
+     * 规范化路径，用于去重；失败时退化为绝对路径（宁可重复也不漏扫）。
+     * 包级可见：供 JVM 单元测试 BankLoaderTest 直接验证去重语义
+     * （TV CI 在 API 30+ 上无法构造可读的多挂载点场景）。
+     */
+    static String canonical(File f) {
         try {
             return f.getCanonicalPath();
         } catch (IOException e) {

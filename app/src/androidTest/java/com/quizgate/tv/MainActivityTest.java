@@ -9,7 +9,6 @@ import org.junit.Test;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
@@ -21,9 +20,11 @@ import static org.junit.Assert.assertTrue;
 /**
  * 家长设置页测试（P0 ①②⑦ + 自定义时长）。
  *
- * 注意：activity_main.xml 是 ScrollView，「开始计时」等按钮在 720p 一屏外，
- * 必须先 scrollTo() 再 click()——这正是线上反馈「点开始计时无效应」的根因，
- * 测试对此形成回归防线。
+ * 注意：activity_main.xml 是 ScrollView，「开始计时」等按钮在 720p 一屏外。
+ * Espresso 的 scrollTo() 依赖 requestRectangleOnScreen，在 TV 模拟器上
+ * 滚动后仍报 not displayed（CI 首跑实测），因此统一走
+ * TestSupport.clickAfterScroll()：真实滑动手势 + 可见性检查——
+ * 这正是线上反馈「点开始计时无效应」的根因场景，测试对此形成回归防线。
  */
 public class MainActivityTest {
 
@@ -73,7 +74,7 @@ public class MainActivityTest {
     @Test
     public void startTimerStartsForegroundService() {
         launchMain();
-        onView(withId(R.id.btn_start_timer)).perform(scrollTo(), click());
+        TestSupport.clickAfterScroll(R.id.btn_start_timer);
 
         TestSupport.waitUntil("状态变为计时中", 5000, new TestSupport.Condition() {
             @Override
@@ -99,7 +100,7 @@ public class MainActivityTest {
     @Test
     public void customMinutesDialogSavesValue() {
         launchMain();
-        onView(withId(R.id.tg_custom)).perform(scrollTo(), click());
+        TestSupport.clickAfterScroll(R.id.tg_custom);
         onView(withId(R.id.tv_num_title)).check(matches(withText("输入观看时长（分钟）")));
 
         onView(withId(R.id.btn_n2)).perform(click());
@@ -121,7 +122,7 @@ public class MainActivityTest {
     @Test
     public void customMinutesRangeGuardAndCancel() {
         launchMain();
-        onView(withId(R.id.tg_custom)).perform(scrollTo(), click());
+        TestSupport.clickAfterScroll(R.id.tg_custom);
 
         onView(withId(R.id.btn_n9)).perform(click());
         onView(withId(R.id.btn_n9)).perform(click());
@@ -137,7 +138,7 @@ public class MainActivityTest {
     @Test
     public void lockNowOpensLockScreen() {
         launchMain();
-        onView(withId(R.id.btn_lock_now)).perform(scrollTo(), click());
+        TestSupport.clickAfterScroll(R.id.btn_lock_now);
         onView(withId(R.id.tv_lock_prompt)).check(matches(isDisplayed()));
         assertTrue(TestSupport.prefs().isLockActive());
     }
@@ -146,7 +147,7 @@ public class MainActivityTest {
     @Test
     public void changePinFlow() {
         launchMain();
-        onView(withId(R.id.btn_change_pin)).perform(scrollTo(), click());
+        TestSupport.clickAfterScroll(R.id.btn_change_pin);
         onView(withId(R.id.tv_pin_title))
                 .check(matches(withText("家长解锁：请输入 PIN")));
 

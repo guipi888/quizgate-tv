@@ -13,7 +13,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 悬浮窗：锁屏期间覆盖桌面，拦截 HOME 键绕过 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- U 盘题库导入 -->
+    <!-- U 盘题库导入。
+         注意（2026-11-05 TV CI 实测）：targetSdk 33 的应用在 API 29+ 设备上
+         一律受分区存储约束，此权限对 /sdcard/QuizGate 的 File 直读无效
+         （requestLegacyExternalStorage 只对 targetSdk 29 有效）。
+         恢复 U 盘导入需 SAF 目录授权或 MANAGE_EXTERNAL_STORAGE，
+         属产品决策，见 README「已知限制」与 Roadmap。 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 

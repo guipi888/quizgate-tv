@@ -10,7 +10,7 @@
 # 覆盖的 P0 项：
 #   ① TV 桌面可见性（LEANBACK_LAUNCHER）
 #   ② 计时/锁屏（由仪器测试覆盖）
-#   ⑥ U 盘题库导入（推送样本 + 仪器测试断言）
+#   ⑥ U 盘题库导入（推送样本 + 仪器测试断言；API 29+ 分区存储下断言优雅降级）
 #   ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）
 set -euo pipefail
 

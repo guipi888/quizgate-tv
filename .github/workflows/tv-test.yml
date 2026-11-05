@@ -18,8 +18,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Android 11：现代电视盒子基线系统。U 盘题库导入只在 API<=32 验证
-          # （READ_EXTERNAL_STORAGE 声明了 maxSdkVersion=32，33+ 需 SAF/所有文件访问）
+          # Android 11：现代电视盒子基线系统。
+          # U 盘题库导入说明（2026-11-05 CI 实测）：targetSdk 33 在 API 29+
+          # 设备上受分区存储约束，File 路径读 /sdcard/QuizGate 不可用
+          # （requestLegacyExternalStorage 只对 targetSdk 29 有效），
+          # 因此 UsbBankImportTest 按「可读则正向断言 / 不可读则优雅降级」
+          # 分支配断，canonical 去重回归由 JVM 单元测试 BankLoaderTest 守护；
+          # 恢复导入需 SAF 或 MANAGE_EXTERNAL_STORAGE，见 README 已知限制。
           # 注意：android-tv 的 x86_64 镜像从 API 36 才开始提供，30/34 用 32 位 x86
           - api-level: "30"
             arch: x86
