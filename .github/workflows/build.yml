@@ -19,8 +19,19 @@ jobs:
 
       # 仓库不提交 gradle-wrapper.jar（二进制不入库），
       # 构建前用 runner 预装的 gradle 生成 wrapper。
+      # --no-validate-url：Gradle 8.10+ 默认对 distribution URL 发 HEAD 探测，
+      # GitHub runner 到 services.gradle.org 的 HEAD 连通性不可靠（十四跑
+      # API 30 连续两次挂在此处）；发行包 GET 下载不受影响，探测只是额外校验。
+      # 重试 3 次防其他偶发。
       - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.7
+        run: |
+          for i in 1 2 3; do
+            if gradle wrapper --gradle-version 8.7 --no-validate-url; then exit 0; fi
+            echo "::warning::wrapper 生成失败（第 $i 次），10 秒后重试"
+            sleep 10
+          done
+          echo "::error::wrapper 生成三次均失败"
+          exit 1
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon
@@ -48,8 +59,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # 同 build job：--no-validate-url 绕开 runner 上不可靠的 HEAD 探测 + 重试
       - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.7
+        run: |
+          for i in 1 2 3; do
+            if gradle wrapper --gradle-version 8.7 --no-validate-url; then exit 0; fi
+            echo "::warning::wrapper 生成失败（第 $i 次），10 秒后重试"
+            sleep 10
+          done
+          echo "::error::wrapper 生成三次均失败"
+          exit 1
 
       - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon

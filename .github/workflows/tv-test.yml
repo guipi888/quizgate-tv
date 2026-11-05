@@ -61,8 +61,21 @@ jobs:
 
       # 仓库不提交 gradle-wrapper.jar（二进制不入库），
       # 构建前用 runner 预装的 gradle 生成 wrapper（与 build.yml 一致）。
+      # --no-validate-url：Gradle 8.10+ 的 wrapper task 默认对 distribution URL
+      # 发 HEAD 探测，GitHub runner 到 services.gradle.org 的 HEAD 连通性不可靠
+      # （十四跑 API 30 连续两次挂在此处：Test of distribution url failed，
+      # 而同 job 的发行包 GET 下载在 28/34 上每次都成功——HEAD 不通、GET 通）。
+      # wrapper jar 本身是本地生成的，探测只是额外校验，关掉不影响正确性。
+      # 重试 3 次防其他偶发（daemon 启动失败等）。
       - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.7
+        run: |
+          for i in 1 2 3; do
+            if gradle wrapper --gradle-version 8.7 --no-validate-url; then exit 0; fi
+            echo "::warning::wrapper 生成失败（第 $i 次），10 秒后重试"
+            sleep 10
+          done
+          echo "::error::wrapper 生成三次均失败"
+          exit 1
 
       - name: Enable KVM
         run: |
