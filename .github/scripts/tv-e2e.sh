@@ -51,19 +51,60 @@ else
 fi
 
 echo "== P0 ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）=="
-# 用 run-as（debug 包免 root）直接写入「计时中」状态，绕开 UI 操作。
-# 引号教训（2026-11-05）：整条命令必须整体加双引号，让重定向由设备端
-# run-as 内的 sh 在 App 数据目录里执行。早期写作
-#   adb shell run-as "$PKG" sh -c 'cat > shared_prefs/...'
-# 单引号被本地 shell 剥掉后，重定向落到设备端外层 shell 的 CWD=/，
-# 报 "can't create shared_prefs/..."——P0 ⑧ 两轮 CI 都因此从未真正验证。
-# 另先 force-stop：避免运行中的进程用内存态 prefs 覆盖刚注入的文件。
-adb shell am force-stop "$PKG"
+# 向 App 数据目录注入「计时中」状态，绕开 UI 操作。
+#
+# 历史教训（2026-11-05，三个连续错误，P0 ⑧ 因此四轮 CI 从未真正验证）：
+# ① 单引号被本地 shell 剥掉：`adb shell run-as "$PKG" sh -c 'cat > f'` 的
+#    重定向落到设备端外层 shell 的 CWD=/，报 can't create shared_prefs/...。
+#    修法：整条命令整体加双引号，让重定向在设备端 run-as 内的 sh 执行。
+# ② 修好引号后，三跑/四跑/五跑连报 `run-as: unknown package`——即使
+#    connectedCheck 刚全绿（app 必然装着）。run-as 在此环境不可用，
+#    原因待查（pm path 诊断见下）。
+# ③ 该命令无 `|| true` 且脚本 set -e：run-as 一失败整个 job 被杀，
+#    后面的 reboot 流程从未执行。
+#
+# 现改为三级递进注入，每级有明确输出；任一级成功即继续，全失败才报错。
+adb shell am force-stop "$PKG" || true
+echo "-- P0 ⑧ 诊断：设备上的包状态 --"
+adb shell pm path "$PKG" 2>&1 | head -1 || true
+if adb shell "run-as $PKG echo probe" >/dev/null 2>&1; then
+  echo "run-as 可用"
+else
+  echo "::warning::run-as 不可用（设备端报错见下），改走 adb root"
+  adb shell "run-as $PKG echo probe" 2>&1 | head -2 || true
+fi
 END=$(( $(date +%s) * 1000 + 1800000 ))
-sed "s/__LOCK_END_AT__/$END/" app/src/androidTest/assets/prefs_timer_running.xml \
-  | adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cat > shared_prefs/quizgate_prefs.xml'"
+PREFS_XML=$(mktemp)
+sed "s/__LOCK_END_AT__/$END/" app/src/androidTest/assets/prefs_timer_running.xml > "$PREFS_XML"
+INJECT_METHOD=""
+if adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs'" 2>/dev/null; then
+  # stdin 重定向本地文件（不用 /sdcard 中转：run-as 内进程是 app UID，
+  # 无存储权限，读不了 /sdcard；adb shell 带命令参数时会转发 stdin）
+  if adb shell "run-as $PKG sh -c 'cat > shared_prefs/quizgate_prefs.xml'" \
+      < "$PREFS_XML" 2>/dev/null; then
+    INJECT_METHOD="run-as"
+  fi
+fi
+if [ -z "$INJECT_METHOD" ]; then
+  # 兜底：模拟器镜像多为 userdebug，adb root 后直写 /data/data
+  if adb root >/dev/null 2>&1 && adb wait-for-device 2>/dev/null; then
+    if adb shell "mkdir -p /data/data/$PKG/shared_prefs" 2>/dev/null; then
+      if adb shell "cat > /data/data/$PKG/shared_prefs/quizgate_prefs.xml" \
+          < "$PREFS_XML" 2>/dev/null; then
+        INJECT_METHOD="adb-root"
+      fi
+    fi
+  fi
+fi
+rm -f "$PREFS_XML"
+if [ -z "$INJECT_METHOD" ]; then
+  echo "::error::prefs 注入失败：run-as 与 adb root 均不可用"
+  FAIL=1
+else
+  echo "prefs 注入方式：$INJECT_METHOD"
+fi
 # 启动一次让进程读取注入的状态（并清掉 stopped 标志，确保开机广播能送达）
-adb shell am start -n "$PKG/.MainActivity"
+adb shell am start -n "$PKG/.MainActivity" || true
 sleep 5
 adb reboot
 adb wait-for-device
