@@ -53,55 +53,57 @@ fi
 echo "== P0 ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）=="
 # 向 App 数据目录注入「计时中」状态，绕开 UI 操作。
 #
-# 历史教训（2026-11-05，三个连续错误，P0 ⑧ 因此四轮 CI 从未真正验证）：
+# 历史教训（2026-11-05，P0 ⑧ 因此五轮 CI 从未真正验证，四个连续错误）：
 # ① 单引号被本地 shell 剥掉：`adb shell run-as "$PKG" sh -c 'cat > f'` 的
 #    重定向落到设备端外层 shell 的 CWD=/，报 can't create shared_prefs/...。
-#    修法：整条命令整体加双引号，让重定向在设备端 run-as 内的 sh 执行。
-# ② 修好引号后，三跑/四跑/五跑连报 `run-as: unknown package`——即使
-#    connectedCheck 刚全绿（app 必然装着）。run-as 在此环境不可用，
-#    原因待查（pm path 诊断见下）。
-# ③ 该命令无 `|| true` 且脚本 set -e：run-as 一失败整个 job 被杀，
-#    后面的 reboot 流程从未执行。
+# ② 修好引号后仍报 `run-as: unknown package`——**真相：AGP 8.1+ 的
+#    connectedCheck 跑完会连 app 一起卸载**（SimpleTestCallable 的
+#    finally 块；AGP 8.5.2 实证，与测试成败无关）。不是 run-as 坏，
+#    是包真的被卸了。已在 gradle.properties 设
+#    android.injected.androidTest.leaveApksInstalledAfterRun=true。
+# ③ 命令无 `|| true` 且脚本 set -e：失败即杀整个 job，reboot 从未执行。
 #
-# 现改为三级递进注入，每级有明确输出；任一级成功即继续，全失败才报错。
+# 现为「保安装 + 兜底重装 + 三级递进注入」：先确认 app 还在（不在则
+# 重装），再依次尝试 run-as → adb root，每级有明确输出。
 adb shell am force-stop "$PKG" || true
-echo "-- P0 ⑧ 诊断：设备上的包状态 --"
-adb shell pm path "$PKG" 2>&1 | head -1 || true
-if adb shell "run-as $PKG echo probe" >/dev/null 2>&1; then
-  echo "run-as 可用"
+if ! adb shell pm path "$PKG" >/dev/null 2>&1; then
+  echo "::warning::设备上没有 app（AGP 测试后卸载？），重装后继续"
+  ./gradlew installDebug --no-daemon || true
+fi
+if ! adb shell pm path "$PKG" >/dev/null 2>&1; then
+  echo "::error::app 不在设备上且重装失败，P0 ⑧ 无法继续"
+  FAIL=1
 else
-  echo "::warning::run-as 不可用（设备端报错见下），改走 adb root"
-  adb shell "run-as $PKG echo probe" 2>&1 | head -2 || true
-fi
-END=$(( $(date +%s) * 1000 + 1800000 ))
-PREFS_XML=$(mktemp)
-sed "s/__LOCK_END_AT__/$END/" app/src/androidTest/assets/prefs_timer_running.xml > "$PREFS_XML"
-INJECT_METHOD=""
-if adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs'" 2>/dev/null; then
-  # stdin 重定向本地文件（不用 /sdcard 中转：run-as 内进程是 app UID，
-  # 无存储权限，读不了 /sdcard；adb shell 带命令参数时会转发 stdin）
-  if adb shell "run-as $PKG sh -c 'cat > shared_prefs/quizgate_prefs.xml'" \
-      < "$PREFS_XML" 2>/dev/null; then
-    INJECT_METHOD="run-as"
+  END=$(( $(date +%s) * 1000 + 1800000 ))
+  PREFS_XML=$(mktemp)
+  sed "s/__LOCK_END_AT__/$END/" app/src/androidTest/assets/prefs_timer_running.xml > "$PREFS_XML"
+  INJECT_METHOD=""
+  if adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs'" 2>/dev/null; then
+    # stdin 重定向本地文件（不用 /sdcard 中转：run-as 内进程是 app UID，
+    # 无存储权限，读不了 /sdcard；adb shell 带命令参数时会转发 stdin）
+    if adb shell "run-as $PKG sh -c 'cat > shared_prefs/quizgate_prefs.xml'" \
+        < "$PREFS_XML" 2>/dev/null; then
+      INJECT_METHOD="run-as"
+    fi
   fi
-fi
-if [ -z "$INJECT_METHOD" ]; then
-  # 兜底：模拟器镜像多为 userdebug，adb root 后直写 /data/data
-  if adb root >/dev/null 2>&1 && adb wait-for-device 2>/dev/null; then
-    if adb shell "mkdir -p /data/data/$PKG/shared_prefs" 2>/dev/null; then
-      if adb shell "cat > /data/data/$PKG/shared_prefs/quizgate_prefs.xml" \
-          < "$PREFS_XML" 2>/dev/null; then
-        INJECT_METHOD="adb-root"
+  if [ -z "$INJECT_METHOD" ]; then
+    # 兜底：模拟器镜像多为 userdebug，adb root 后直写 /data/data
+    if adb root >/dev/null 2>&1 && adb wait-for-device 2>/dev/null; then
+      if adb shell "mkdir -p /data/data/$PKG/shared_prefs" 2>/dev/null; then
+        if adb shell "cat > /data/data/$PKG/shared_prefs/quizgate_prefs.xml" \
+            < "$PREFS_XML" 2>/dev/null; then
+          INJECT_METHOD="adb-root"
+        fi
       fi
     fi
   fi
-fi
-rm -f "$PREFS_XML"
-if [ -z "$INJECT_METHOD" ]; then
-  echo "::error::prefs 注入失败：run-as 与 adb root 均不可用"
-  FAIL=1
-else
-  echo "prefs 注入方式：$INJECT_METHOD"
+  rm -f "$PREFS_XML"
+  if [ -z "$INJECT_METHOD" ]; then
+    echo "::error::prefs 注入失败：run-as 与 adb root 均不可用"
+    FAIL=1
+  else
+    echo "prefs 注入方式：$INJECT_METHOD"
+  fi
 fi
 # 启动一次让进程读取注入的状态（并清掉 stopped 标志，确保开机广播能送达）
 adb shell am start -n "$PKG/.MainActivity" || true
