@@ -74,33 +74,48 @@ else
   echo "设备 API level: $SDK，安装/测试通道：gradle/ddmlib"
 fi
 
-install_app() {
-  # 只装 app APK（P0 ⑧ 兜底重装用）；CLI 模式下 APK 须已构建
-  if [ "$CLI_MODE" = "1" ]; then
-    adb install -r -t app/build/outputs/apk/debug/app-debug.apk
-  else
-    ./gradlew installDebug --no-daemon
-  fi
+# 安装单个 APK：push（纯传输）+ pm install（纯安装）分离，超时/重试各自独立。
+# 为什么不用 adb install：十一跑 API 34 三次 install 均整 3 分钟被本地
+# timeout 杀掉且无 INSTALL_FAILED_* 输出——本地客户端被杀后设备端
+# pm install 仍在跑，后续重试大概率等同一个包的会话（会话锁），
+# 三次全挂。分离后传输失败只重推、安装失败可清理会话后再试。
+# pm install /data/local/tmp 为官方文档用法。
+install_one_apk() {
+  local apk="$1" name="$2"
+  local remote="/data/local/tmp/$(basename "$apk")"
+  for i in 1 2 3; do
+    log "[$name] 安装尝试 $i/3：push"
+    if ADB_TIMEOUT=300 adb push "$apk" "$remote" >/dev/null 2>&1; then
+      log "[$name] push 完成，pm install（超时 600s）"
+      local out
+      out=$(ADB_TIMEOUT=600 adb shell pm install -r -t "$remote" 2>&1) || true
+      echo "$out" | grep -a -v "^$" | head -5 || true
+      if echo "$out" | grep -aq "Success"; then
+        log "[$name] 安装成功"
+        return 0
+      fi
+      log "::warning::[$name] pm install 未报 Success（尝试 $i）"
+    else
+      log "::warning::[$name] push 失败（尝试 $i）"
+    fi
+    # 清理：本地 timeout 杀掉 adb 后设备端 pm install 可能仍在跑，
+    # 先 reconnect 断僵死通道，再卸载清会话，最后等 installd 收尾。
+    adb reconnect >/dev/null 2>&1 || true
+    ADB_TIMEOUT=120 adb shell pm uninstall "$PKG" >/dev/null 2>&1 || true
+    ADB_TIMEOUT=120 adb shell pm uninstall "$TEST_PKG" >/dev/null 2>&1 || true
+    sleep 15
+  done
+  log "::error::[$name] 三次安装均失败"
+  return 1
 }
 
 log "== 安装 App 与仪器测试 APK =="
 if [ "$CLI_MODE" = "1" ]; then
   ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
-  INSTALL_OK=0
-  for i in 1 2 3; do
-    if ADB_TIMEOUT=180 adb install -r -t app/build/outputs/apk/debug/app-debug.apk \
-      && ADB_TIMEOUT=180 adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; then
-      INSTALL_OK=1
-      break
-    fi
-    log "::warning::adb install 失败（第 $i 次），重试"
-    sleep 5
-  done
-  if [ "$INSTALL_OK" != "1" ]; then
-    log "::error::adb install 三次均失败"
-    adb exec-out screencap -p > tv-failure.png || true
-    exit 1
-  fi
+  install_one_apk app/build/outputs/apk/debug/app-debug.apk app || {
+    adb exec-out screencap -p > tv-failure.png || true; exit 1; }
+  install_one_apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk androidTest || {
+    adb exec-out screencap -p > tv-failure.png || true; exit 1; }
 else
   # API 34 之外的镜像 ddmlib 通道正常；保留 3 次重试作为偶发抖动对策
   INSTALL_OK=0
@@ -206,7 +221,11 @@ log "== P0 ⑧ 重启恢复（真实 adb reboot + BOOT_COMPLETED）=="
 adb shell am force-stop "$PKG" || true
 if ! adb shell pm path "$PKG" >/dev/null 2>&1; then
   echo "::warning::设备上没有 app（AGP 测试后卸载？），重装后继续"
-  install_app || true
+  if [ "$CLI_MODE" = "1" ]; then
+    install_one_apk app/build/outputs/apk/debug/app-debug.apk app || true
+  else
+    ./gradlew installDebug --no-daemon || true
+  fi
 fi
 if ! adb shell pm path "$PKG" >/dev/null 2>&1; then
   echo "::error::app 不在设备上且重装失败，P0 ⑧ 无法继续"
