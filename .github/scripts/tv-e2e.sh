@@ -17,7 +17,28 @@ set -euo pipefail
 PKG=com.quizgate.tv
 
 echo "== 安装 App 与仪器测试 APK =="
-./gradlew installDebug installDebugAndroidTest --no-daemon
+# API 34（Android 14）TV 镜像上 installDebug 连续多轮报
+# ddmlib ShellCommandUnresponsiveException（adb shell pm install 无响应，
+# 4-5 分钟后超时），API 28/30 同配置正常——镜像相关系统性问题。
+# 对策：最多 3 次尝试，每次失败先重启 adb server 清掉僵死连接再重试。
+INSTALL_OK=0
+for i in 1 2 3; do
+  if ./gradlew installDebug installDebugAndroidTest --no-daemon; then
+    INSTALL_OK=1
+    break
+  fi
+  echo "::warning::安装失败（第 $i 次），重启 adb server 后重试"
+  adb kill-server || true
+  sleep 5
+  adb start-server || true
+  adb wait-for-device || true
+  sleep 10
+done
+if [ "$INSTALL_OK" != "1" ]; then
+  echo "::error::安装 App 与仪器测试 APK 三次均失败"
+  adb exec-out screencap -p > tv-failure.png || true
+  exit 1
+fi
 
 echo "== 授予仪器测试依赖的权限 =="
 # 悬浮窗：Android 10+ 后台拉起锁屏页 / 开机恢复必需（appops 方式，重装保持）
