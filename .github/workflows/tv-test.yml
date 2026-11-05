@@ -25,6 +25,7 @@ jobs:
           # 计入总量在真实文件上得到验证（API 29+ 只有 JVM 单测 BankLoaderTest 守护）。
           # 没有这个 job，「支持到 Android 9」就只是一句无测试背书的声明。
           - api-level: "28"
+            target: android-tv
             arch: x86
           # Android 11：现代电视盒子基线系统。
           # U 盘题库导入说明（2026-11-05 CI 实测）：targetSdk 33 在 API 29+
@@ -33,12 +34,23 @@ jobs:
           # 因此 UsbBankImportTest 按「可读则正向断言 / 不可读则优雅降级」
           # 分支配断，canonical 去重回归由 JVM 单元测试 BankLoaderTest 守护；
           # 恢复导入需 SAF 或 MANAGE_EXTERNAL_STORAGE，见 README 已知限制。
-          # 注意：android-tv 的 x86_64 镜像从 API 36 才开始提供，30/34 用 32 位 x86
           - api-level: "30"
+            target: android-tv
             arch: x86
-          # Android 14：最新电视系统。验证前台服务类型、通知权限、重启恢复等新版本行为
+          # Android 14：最新电视系统。验证前台服务类型、通知权限、重启恢复等新版本行为。
+          # ⚠️ 形态例外（2026-11-06 十三跑确诊）：官方 android-tv 镜像 API 34 只有
+          # 32 位 x86（Google 仓库 XML 坐实：x86_64 从 API 36 起才提供），该镜像在
+          # GitHub runner 上系统性不稳定——ddmlib 持久 shell 无响应（八跑）+
+          # installd 安装时好时死（十跑成功过，十一/十二/十三跑每次安装均挂起至
+          # 超时，900s 上限都杀不掉，无任何错误输出）。换 google_atd（Google 官方
+          # CI 专用镜像，x86_64，启动快、稳定性按 CI 场景设计）。
+          # 覆盖损失：ATD 是车机形态，无 TV 桌面，P0 ①（LEANBACK_LAUNCHER）在此
+          # job 跳过——该项为 manifest 声明级行为，已在 API 28/30 TV 镜像双绿验证，
+          # 与系统版本弱相关。其余 P0（前台服务/通知/重启恢复/U 盘导入/计时到期）
+          # 均为系统级行为，与设备形态无关，照常全量验证。
           - api-level: "34"
-            arch: x86
+            target: google_atd
+            arch: x86_64
     steps:
       - uses: actions/checkout@v4
 
@@ -62,7 +74,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          target: android-tv
+          target: ${{ matrix.target }}
           arch: ${{ matrix.arch }}
           profile: tv_1080p
           ram-size: 2048M
