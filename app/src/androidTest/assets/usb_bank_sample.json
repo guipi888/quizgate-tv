@@ -1,0 +1,33 @@
+{
+ "name": "U盘导入测试题库",
+ "type": "word_choice",
+ "questions": [
+  {
+   "q": "电视机",
+   "a": "television",
+   "d": [
+    "telephone",
+    "telescope",
+    "thermometer"
+   ]
+  },
+  {
+   "q": "遥控器",
+   "a": "remote control",
+   "d": [
+    "record player",
+    "refrigerator",
+    "washing machine"
+   ]
+  },
+  {
+   "q": "沙发",
+   "a": "sofa",
+   "d": [
+    "shelf",
+    "sink",
+    "stove"
+   ]
+  }
+ ]
+}

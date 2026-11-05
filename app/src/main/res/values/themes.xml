@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.QuizGate" parent="@android:style/Theme.Material.NoTitleBar">
+    <style name="Theme.QuizGate" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowFullscreen">true</item>
         <item name="android:colorBackground">@color/bg</item>
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:textColorPrimary">@color/text</item>
     </style>
 
-    <style name="Theme.QuizGate.Lock" parent="@android:style/Theme.Material.NoTitleBar.Fullscreen">
+    <style name="Theme.QuizGate.Lock" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
         <item name="android:colorBackground">@color/bg</item>
         <item name="android:windowBackground">@color/bg</item>
     </style>

@@ -5,7 +5,6 @@ import android.content.Context;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
-import android.widget.Button;
 import android.widget.TextView;
 
 /**
@@ -20,7 +19,14 @@ public class PinPadDialog extends Dialog implements View.OnClickListener {
 
     private static final int MAX_LEN = 4;
 
+    /** 下标即数字值，避免依赖按钮文案取数。 */
+    private static final int[] DIGIT_IDS = {
+            R.id.btn_d0, R.id.btn_d1, R.id.btn_d2, R.id.btn_d3, R.id.btn_d4,
+            R.id.btn_d5, R.id.btn_d6, R.id.btn_d7, R.id.btn_d8, R.id.btn_d9,
+    };
+
     private final boolean verifyMode;
+    private final String titleText;
     private final Callback callback;
     private final StringBuilder input = new StringBuilder();
 
@@ -38,6 +44,7 @@ public class PinPadDialog extends Dialog implements View.OnClickListener {
     private PinPadDialog(Context ctx, String title, boolean verifyMode, Callback cb) {
         super(ctx);
         this.verifyMode = verifyMode;
+        this.titleText = title;
         this.callback = cb;
         setCancelable(false);
         setTitle(title);
@@ -51,7 +58,9 @@ public class PinPadDialog extends Dialog implements View.OnClickListener {
 
         tvTitle = (TextView) findViewById(R.id.tv_pin_title);
         tvDots = (TextView) findViewById(R.id.tv_pin_dots);
-        tvTitle.setText(getTitleForDialog());
+        // 标题用调用方传入的（验旧 / 输新 / 确认新 各不相同），
+        // 早期版本这里写死取 string 资源，"请再次输入新 PIN"永远不会显示。
+        tvTitle.setText(titleText);
 
         int[] ids = {
                 R.id.btn_d1, R.id.btn_d2, R.id.btn_d3,
@@ -63,11 +72,6 @@ public class PinPadDialog extends Dialog implements View.OnClickListener {
             findViewById(id).setOnClickListener(this);
         }
         refreshDots();
-    }
-
-    private String getTitleForDialog() {
-        CharSequence t = getContext().getString(R.string.pin_parent_verify);
-        return verifyMode ? t.toString() : getContext().getString(R.string.pin_enter_new);
     }
 
     @Override
@@ -84,15 +88,24 @@ public class PinPadDialog extends Dialog implements View.OnClickListener {
             submit();
             return;
         }
-        if (input.length() >= MAX_LEN) {
+        int digit = digitForId(id);
+        if (digit < 0 || input.length() >= MAX_LEN) {
             return;
         }
-        Button b = (Button) v;
-        input.append(b.getText().toString());
+        input.append((char) ('0' + digit));
         refreshDots();
         if (input.length() == MAX_LEN) {
             submit();
         }
+    }
+
+    private static int digitForId(int id) {
+        for (int i = 0; i < DIGIT_IDS.length; i++) {
+            if (DIGIT_IDS[i] == id) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void submit() {

@@ -111,7 +111,28 @@
                 android:textOff="120"
                 android:textOn="120"
                 android:textSize="18sp" />
+
+            <ToggleButton
+                android:id="@+id/tg_custom"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_toggle"
+                android:textColor="@color/text"
+                android:textOff="自定义"
+                android:textOn="自定义"
+                android:textSize="16sp" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/tv_custom_info"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/accent"
+            android:textSize="16sp"
+            android:visibility="gone" />
 
         <TextView
             android:layout_width="wrap_content"

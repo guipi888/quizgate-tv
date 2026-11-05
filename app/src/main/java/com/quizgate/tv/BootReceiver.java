@@ -3,6 +3,7 @@ package com.quizgate.tv;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 
 /**
  * 开机自启与锁屏恢复：
@@ -28,12 +29,26 @@ public class BootReceiver extends BroadcastReceiver {
         if (prefs.isLockActive()) {
             Intent lock = new Intent(context, LockActivity.class);
             lock.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            context.startActivity(lock);
+            try {
+                context.startActivity(lock);
+            } catch (Exception ignored) {
+                // Android 10+ 后台启动 Activity 受限，锁屏会在用户下次亮屏/打开 App 时恢复
+            }
             return;
         }
         if (prefs.isTimerRunning() && prefs.remainingMillis() > 0) {
             Intent svc = new Intent(context, LockService.class);
-            context.startService(svc);
+            try {
+                // Android 8+ 禁止后台 startService，必须走 startForegroundService，
+                // 否则开机后计时无法恢复（表现为「重启后门禁失效」）。
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(svc);
+                } else {
+                    context.startService(svc);
+                }
+            } catch (Exception ignored) {
+                // 个别 ROM 连前台服务也拦截；用户再次打开 App 时会重新启动计时
+            }
         }
     }
 }

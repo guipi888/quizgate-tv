@@ -138,10 +138,28 @@ public class LockService extends Service {
     }
 
     private void startForegroundCompat(Notification notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTI_TIMER, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-        } else {
-            startForeground(NOTI_TIMER, notification);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTI_TIMER, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } else {
+                startForeground(NOTI_TIMER, notification);
+            }
+        } catch (Exception e) {
+            // 部分 ROM 或未授予通知权限时，带类型的 startForeground 会抛异常。
+            // 逐级降级，保证计时本身能跑起来，而不是让整个服务挂掉。
+            try {
+                startForeground(NOTI_TIMER, notification);
+            } catch (Exception ignored) {
+                NotificationManager nm =
+                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) {
+                    try {
+                        nm.notify(NOTI_TIMER, notification);
+                    } catch (Exception ignored2) {
+                        // 通知被系统彻底禁用：计时仍然继续，只是没有常驻通知
+                    }
+                }
+            }
         }
     }
 

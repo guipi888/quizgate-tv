@@ -12,6 +12,8 @@ android {
         targetSdk 33
         versionCode 1
         versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -42,5 +44,20 @@ android {
 }
 
 dependencies {
-    // 无第三方依赖：org.json 为 Android 内置，最大限度保证老旧电视系统可装
+    // 无第三方依赖：org.json 为 Android 内置，最大限度保证老旧电视系统可装。
+    // 以下仅测试用途（testImplementation / androidTestImplementation），
+    // 不会打进 APK，release 包仍保持零第三方依赖。
+
+    testImplementation 'junit:junit:4.13.2'
+    // 单元测试里 android.jar 的 org.json 是空壳桩，需引入真实实现
+    testImplementation 'org.json:json:20231013'
+
+    // 仪器测试（仅在连接设备/模拟器时运行，不进入 APK）。
+    // 版本选 2024 年稳定线，与 compileSdk 34 兼容（新版 androidx 已要求 35+）。
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0'
 }

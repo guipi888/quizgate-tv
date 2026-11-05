@@ -6,6 +6,10 @@
 - 交互：纯遥控器 D-pad 操作，无需触屏
 - 依赖：零第三方库，`org.json` 用系统内置，最大兼容老旧电视 ROM
 - 构建：GitHub Actions 云构建，本地无需 Android 开发环境
+- 测试：GitHub Actions 跑**真实 Android TV 系统镜像**（API 30/34）+ Espresso 仪器测试，无需真机
+
+[![Build APK](https://github.com/guipi888/quizgate-tv/actions/workflows/build.yml/badge.svg)](https://github.com/guipi888/quizgate-tv/actions/workflows/build.yml)
+[![TV Test](https://github.com/guipi888/quizgate-tv/actions/workflows/tv-test.yml/badge.svg)](https://github.com/guipi888/quizgate-tv/actions/workflows/tv-test.yml)
 
 ## 1.1 功能特性
 
@@ -107,6 +111,7 @@ adb install quizgate-tv-debug.apk
 - Android 系统不允许第三方应用真正拦截 HOME 键，最强方案是「设为默认桌面」（设置页有引导）
 - 修改系统时间可能影响计时精度（计时用墙钟时间戳，改时间会提前或延后触发）
 - 防卸载需 Device Owner 权限（adb 一次性配置），未内置，见 Roadmap
+- **U 盘题库导入仅支持到 Android 12（API 32）**：`READ_EXTERNAL_STORAGE` 声明了 `maxSdkVersion="32"`，Android 13+ 不再申请存储权限，且系统已禁止应用直接读共享存储里的非媒体文件。Android 13+ 电视需要改用 SAF 目录选择或申请「所有文件访问权限」，见 Roadmap
 - 本产品定位是「儿童抵抗」而非「安全防护」：能防住 10 岁以下孩子的大部分操作，防不住有心人
 
 ## 1.7 构建
@@ -115,7 +120,19 @@ adb install quizgate-tv-debug.apk
 
 代码推送到 GitHub 后自动构建，debug APK 在 Actions → Artifacts 下载；打 `v*` tag 自动发 Release。
 
-### 1.7.2 本地构建
+### 1.7.2 自动化测试（真实 Android TV 镜像，无需真机）
+
+`tv-test.yml` 工作流在 GitHub Actions 上启动**真实 Android TV 系统镜像**（matrix：API 30 × API 34），跑三层验证：
+
+| 层 | 内容 |
+|---|---|
+| 单元测试（JVM） | 题型引擎、题库解析、连对/解锁规则（`app/src/test/`） |
+| 仪器测试（Espresso） | 设置页、锁屏页、PIN 键盘、自定义时长、倒计时到期、恢复广播（`app/src/androidTest/`） |
+| 端到端（adb） | TV 桌面可见性、U 盘题库导入、真实 `adb reboot` 后的开机恢复 |
+
+对本地无电视硬件的开发者，这是验证 P0 行为（前台服务、通知、悬浮窗拉起、重启恢复）最接近真机的免费方案。仪器测试通过与 App 同进程的反射读取答题引擎，确定性点击「正确选项」，不依赖 OCR 或穷举。
+
+### 1.7.3 本地构建
 
 ```bash
 # 需要 JDK 17 + Android SDK
@@ -137,9 +154,11 @@ Release 签名：在 `gradle.properties` 或环境变量提供 `KEYSTORE_FILE` /
 - [ ] Device Owner 防卸载引导（adb 一次性配置）
 - [ ] 局域网手机端管理页（推题 / 看记录 / 临时放行）
 - [ ] 更多电视 ROM 适配实测（海信 / TCL / 当贝）
+- [ ] Android 13+ U 盘题库导入（SAF 目录选择或「所有文件访问」授权）
 
 ## 📝 版本迭代记录
 
 | 版本 | 日期 | 更新内容摘要 | 操作人 |
 |------|------|------------|--------|
 | v1.0 | 2026-11-02 | 创建项目：锁屏内核 + 三题型引擎 + U 盘题库导入 + 云构建流水线 | 桂皮 |
+| v1.1 | 2026-11-05 | TV 仿真测试流水线（API 30/34 × android-tv × Espresso）；修复 PIN 按钮不显示、自定义时长对话框、确认新 PIN 标题错显、题库重复扫描；新增 Android 13+ 前台服务/通知权限适配 | 桂皮 |

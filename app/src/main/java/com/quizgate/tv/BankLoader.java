@@ -10,7 +10,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 题库加载器：内置 assets 题库 + U 盘导入题库。
@@ -58,9 +60,19 @@ public class BankLoader {
         return result;
     }
 
-    /** 扫描常见外置挂载点下的 QuizGate/banks/*.json。 */
+    /**
+     * 扫描常见外置挂载点下的 QuizGate/banks/*.json。
+     *
+     * 去重说明：不同挂载点可能是同一物理存储的不同视图
+     * （/sdcard 与 getExternalStorageDirectory() 必然相同；
+     * /mnt/media_rw 与 /storage/&lt;UUID&gt; 在许多电视盒子上也是同一块 U 盘）。
+     * 早期版本按目录逐个扫，同一文件会被解析多次，题目数翻倍、
+     * 锁屏页同一道题反复出现。这里按规范化路径去重。
+     */
     public static LoadResult scanExternal(Context ctx) {
         LoadResult result = new LoadResult();
+        Set<String> scannedDirs = new LinkedHashSet<>();
+        Set<String> loadedFiles = new LinkedHashSet<>();
         List<File> roots = new ArrayList<>();
         File storage = new File("/storage");
         File[] children = storage.listFiles();
@@ -80,12 +92,18 @@ public class BankLoader {
                 continue;
             }
             File bankDir = new File(root, USB_SUBDIR);
+            if (!scannedDirs.add(canonical(bankDir))) {
+                continue;
+            }
             File[] files = bankDir.listFiles();
             if (files == null) {
                 continue;
             }
             for (File f : files) {
                 if (!f.isFile() || !f.getName().endsWith(".json")) {
+                    continue;
+                }
+                if (!loadedFiles.add(canonical(f))) {
                     continue;
                 }
                 try {
@@ -96,6 +114,15 @@ public class BankLoader {
             }
         }
         return result;
+    }
+
+    /** 规范化路径，用于去重；失败时退化为绝对路径（宁可重复也不漏扫）。 */
+    private static String canonical(File f) {
+        try {
+            return f.getCanonicalPath();
+        } catch (IOException e) {
+            return f.getAbsolutePath();
+        }
     }
 
     /** 内置 + U 盘全部加载。 */

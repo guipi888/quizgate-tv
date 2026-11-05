@@ -35,39 +35,48 @@
 
         <Button
             android:id="@+id/btn_d1"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="1" />
 
         <Button
             android:id="@+id/btn_d2"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="2" />
 
         <Button
             android:id="@+id/btn_d3"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="3" />
 
         <Button
             android:id="@+id/btn_d4"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="4" />
 
         <Button
             android:id="@+id/btn_d5"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="5" />
 
         <Button
             android:id="@+id/btn_d6"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="6" />
 
         <Button
             android:id="@+id/btn_d7"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="7" />
 
         <Button
             android:id="@+id/btn_d8"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="8" />
 
         <Button
             android:id="@+id/btn_d9"
-            style="@style/PinKey" />
+            style="@style/PinKey"
+            android:text="9" />
 
         <Button
             android:id="@+id/btn_del"

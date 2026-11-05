@@ -1,7 +1,11 @@
 package com.quizgate.tv;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
@@ -24,14 +28,21 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
     private TextView tvStatus;
     private TextView tvBankInfo;
+    private TextView tvCustomInfo;
     private ToggleButton[] minuteButtons = new ToggleButton[6];
     private ToggleButton[] streakButtons = new ToggleButton[3];
     private ToggleButton tgPinyin;
     private ToggleButton tgMath;
     private ToggleButton tgWord;
+    private ToggleButton tgCustom;
 
     private static final int[] MINUTE_VALUES = {15, 30, 45, 60, 90, 120};
     private static final int[] STREAK_VALUES = {3, 5, 10};
+    private static final int MIN_CUSTOM_MINUTES = 1;
+    private static final int MAX_CUSTOM_MINUTES = 720;
+
+    /** 防止 refreshMinuteButtons() 里的 setChecked 反向触发自定义对话框。 */
+    private boolean suppressMinuteEvents = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,6 +60,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
         minuteButtons[3] = (ToggleButton) findViewById(R.id.tg_m60);
         minuteButtons[4] = (ToggleButton) findViewById(R.id.tg_m90);
         minuteButtons[5] = (ToggleButton) findViewById(R.id.tg_m120);
+        tgCustom = (ToggleButton) findViewById(R.id.tg_custom);
+        tvCustomInfo = (TextView) findViewById(R.id.tv_custom_info);
 
         streakButtons[0] = (ToggleButton) findViewById(R.id.tg_s3);
         streakButtons[1] = (ToggleButton) findViewById(R.id.tg_s5);
@@ -65,6 +78,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
         findViewById(R.id.btn_start_timer).setOnClickListener(this);
         findViewById(R.id.btn_lock_now).setOnClickListener(this);
 
+        ensureNotificationPermission();
+
         for (int i = 0; i < minuteButtons.length; i++) {
             final int minutes = MINUTE_VALUES[i];
             minuteButtons[i].setOnCheckedChangeListener(
@@ -78,6 +93,18 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         }
                     });
         }
+
+        tgCustom.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                        if (!isChecked || suppressMinuteEvents) {
+                            return;
+                        }
+                        showCustomMinutesDialog();
+                    }
+                });
+
         for (int i = 0; i < streakButtons.length; i++) {
             final int streak = STREAK_VALUES[i];
             streakButtons[i].setOnCheckedChangeListener(
@@ -118,9 +145,45 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
     private void refreshMinuteButtons() {
         int cur = prefs.getWatchMinutes();
+        boolean matched = false;
+        suppressMinuteEvents = true;
         for (int i = 0; i < minuteButtons.length; i++) {
-            minuteButtons[i].setChecked(MINUTE_VALUES[i] == cur);
+            boolean on = MINUTE_VALUES[i] == cur;
+            minuteButtons[i].setChecked(on);
+            if (on) {
+                matched = true;
+            }
         }
+        tgCustom.setChecked(!matched);
+        suppressMinuteEvents = false;
+
+        if (matched) {
+            tvCustomInfo.setVisibility(View.GONE);
+        } else {
+            tvCustomInfo.setVisibility(View.VISIBLE);
+            tvCustomInfo.setText("当前自定义：" + cur + " 分钟");
+        }
+    }
+
+    private void showCustomMinutesDialog() {
+        final NumberInputDialog dlg = NumberInputDialog.create(
+                this,
+                "输入观看时长（分钟）",
+                MIN_CUSTOM_MINUTES,
+                MAX_CUSTOM_MINUTES,
+                new NumberInputDialog.Callback() {
+                    @Override
+                    public void onConfirm(int value) {
+                        prefs.setWatchMinutes(value);
+                    }
+                });
+        dlg.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                refreshMinuteButtons();
+            }
+        });
+        dlg.show();
     }
 
     private void refreshStreakButtons() {
@@ -158,15 +221,51 @@ public class MainActivity extends Activity implements View.OnClickListener {
         tvBankInfo.setText(text);
     }
 
+    private static final int REQ_NOTIFICATION = 1001;
+
+    /**
+     * Android 13+ 未授予通知权限时，前台服务的常驻倒计时通知不会显示，
+     * 用户点完「开始计时」只看得到一闪而过的 Toast，容易误判为功能没生效。
+     * 这里在进入设置页时主动申请一次。
+     */
+    private void ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                try {
+                    requestPermissions(
+                            new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                            REQ_NOTIFICATION);
+                } catch (Exception ignored) {
+                    // 部分定制 ROM 不支持运行时申请，忽略即可
+                }
+            }
+        }
+    }
+
     private void refreshStatus() {
         String text;
+        Button startBtn = (Button) findViewById(R.id.btn_start_timer);
         if (prefs.isLockActive()) {
             text = "状态：已锁定，请答题解锁";
+            if (startBtn != null) {
+                startBtn.setText("锁定中 · 请先答题解锁");
+                startBtn.setAlpha(0.55f);
+            }
         } else if (prefs.isTimerRunning()) {
             long seconds = prefs.remainingMillis() / 1000L;
             text = String.format("状态：计时中，剩余 %02d:%02d", seconds / 60, seconds % 60);
+            if (startBtn != null) {
+                startBtn.setText(String.format("计时中 %02d:%02d · 点此重新计时",
+                        seconds / 60, seconds % 60));
+                startBtn.setAlpha(1f);
+            }
         } else {
             text = "状态：未启动";
+            if (startBtn != null) {
+                startBtn.setText("开始计时");
+                startBtn.setAlpha(1f);
+            }
         }
         tvStatus.setText(text);
     }
@@ -203,7 +302,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 return;
             }
             prefs.startWatchTimer();
-            startService(new Intent(this, LockService.class));
+            try {
+                Intent svc = new Intent(this, LockService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(svc);
+                } else {
+                    startService(svc);
+                }
+            } catch (Exception e) {
+                Toast.makeText(this, "计时服务启动失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
             Toast.makeText(this, "计时已开始：" + prefs.getWatchMinutes() + " 分钟", Toast.LENGTH_SHORT).show();
             refreshStatus();
         } else if (id == R.id.btn_lock_now) {

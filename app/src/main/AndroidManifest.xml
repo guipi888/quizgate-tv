@@ -5,16 +5,24 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 前台服务：计时不被系统杀掉 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14+ 起，dataSync 类型的前台服务必须声明此权限，
+         否则 startForeground() 直接抛 SecurityException，表现为「点开始计时就闪退」 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Android 13+ 通知权限：没有它前台服务通知不显示，
+         用户点完开始计时看不到任何常驻倒计时，只能等 Toast 消失 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 悬浮窗：锁屏期间覆盖桌面，拦截 HOME 键绕过 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- U 盘题库导入 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- 声明为 TV 应用：手机安装不了，仅电视/盒子 -->
+    <!-- TV 应用能力声明。
+         required=false 的理由：电视上仍通过 LEANBACK_LAUNCHER 出现在 TV 桌面；
+         设为 false 后手机/平板也能安装，便于功能验证与体验。 -->
     <uses-feature
         android:name="android.software.leanback"
-        android:required="true" />
+        android:required="false" />
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />

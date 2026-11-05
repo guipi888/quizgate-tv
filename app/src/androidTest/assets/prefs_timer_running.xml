@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<!--
+  仅供 CI「重启恢复」步骤使用：通过 run-as 直接写入 shared_prefs，
+  模拟「计时中被关机」的状态。__LOCK_END_AT__ 由工作流替换为
+  now + 30min 的墙钟时间戳（毫秒）。
+  字段名必须与 PrefManager 的键一致。
+-->
+<map>
+    <boolean name="timer_running" value="true" />
+    <boolean name="lock_active" value="false" />
+    <boolean name="boot_auto" value="true" />
+    <int name="watch_minutes" value="30" />
+    <int name="required_streak" value="3" />
+    <int name="streak" value="0" />
+    <string name="parent_pin">1234</string>
+    <long name="lock_end_at" value="__LOCK_END_AT__" />
+</map>

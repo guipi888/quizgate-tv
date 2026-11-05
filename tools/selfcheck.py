@@ -6,7 +6,8 @@
   2. Java 代码引用的 R.* 资源均已在 XML 中定义
   3. AndroidManifest 声明的组件类文件存在
   4. assets 题库 JSON 可解析且字段符合引擎约定
-  5. Java 文件括号配对（粗检）
+  5. 可点击控件文案审计（防"按钮没文字"类缺陷）
+  6. Java 文件括号配对（粗检）
 
 用法：python tools/selfcheck.py
 """
@@ -149,7 +150,89 @@ for bf in bank_files:
     print("  %s: %d questions, type=%s" % (os.path.basename(bf), len(qs), data.get("type")))
 print("[4] Bank JSON checked")
 
-# ---------- 6. Java 括号配对（跳过字符串与注释的粗检） ----------
+# ---------- 6. 可点击控件文案审计 ----------
+# 背景：曾出现 dialog_pin.xml 的 1-9 按钮漏写 android:text，
+# 而 PinPadDialog 又用 b.getText() 取值，导致 PIN 永远输不进、
+# 家长解锁 100% 卡死。此类缺陷编译不报错、肉眼也容易漏。
+#
+# 规则：可点击控件必须满足下列之一，否则报错。
+#   a) android:text / android:contentDescription 非空
+#   b) ToggleButton 的 android:textOn / textOff 非空
+#   c) 所用 style 内定义了 android:text
+#   d) 显式声明 tools:runtimeText="true" —— 表示文案由 Java 运行时填充
+#      （必须写在布局里，迫使加控件的人明确表态；不写就过不了门禁）
+CLICKABLE_TAGS = ("Button", "ToggleButton", "CheckBox", "RadioButton", "ImageButton")
+ANDROID = "{http://schemas.android.com/apk/res/android}"
+TOOLS = "{http://schemas.android.com/tools}"
+
+style_items = {}
+for f in glob.glob(os.path.join(MAIN, "res", "values", "*.xml")):
+    for st in ET.parse(f).getroot().findall("style"):
+        items = {}
+        for item in st.findall("item"):
+            items[item.get("name")] = (item.text or "").strip()
+        style_items[st.get("name")] = items
+
+strings_map = {}
+for f in glob.glob(os.path.join(MAIN, "res", "values", "*.xml")):
+    for s in ET.parse(f).getroot().findall("string"):
+        strings_map[s.get("name")] = (s.text or "").strip()
+
+
+def resolve_text(value):
+    """把 @string/xxx 解析为实际文案；非引用原样返回。"""
+    m = re.match(r"^@string/(\w+)$", value or "")
+    if not m:
+        return value or ""
+    return strings_map.get(m.group(1), "")
+
+
+def label_of(el):
+    """返回该控件的可见文案，找不到返回空串。"""
+    text = resolve_text(el.get(ANDROID + "text"))
+    if text:
+        return text
+    desc = resolve_text(el.get(ANDROID + "contentDescription"))
+    if desc:
+        return desc
+    for attr in ("textOn", "textOff"):
+        v = resolve_text(el.get(ANDROID + attr))
+        if v:
+            return v
+    style_ref = el.get("style") or ""
+    style_name = style_ref.rsplit("/", 1)[-1] if style_ref else ""
+    return resolve_text(style_items.get(style_name, {}).get("android:text", ""))
+
+
+widget_total = 0
+widget_missing = 0
+for f in sorted(glob.glob(os.path.join(MAIN, "res", "layout", "*.xml"))):
+    base = os.path.basename(f)
+    for el in ET.parse(f).getroot().iter():
+        if el.tag not in CLICKABLE_TAGS:
+            continue
+        widget_total += 1
+        wid = el.get(ANDROID + "id") or "(no-id)"
+        label = label_of(el)
+        runtime = (el.get(TOOLS + "runtimeText") or "").lower() == "true"
+        if not label and not runtime:
+            widget_missing += 1
+            err("clickable widget has no text/contentDescription and no "
+                "tools:runtimeText=\"true\": %s id=%s tag=%s"
+                % (base, wid, el.tag))
+        elif not label and runtime:
+            print("    (runtime-filled) %s %s" % (base, wid))
+print("[5] Widget text audit: %d clickable widgets, %d missing label"
+      % (widget_total, widget_missing))
+
+# Java 侧不得依赖按钮文案取值（应按 id 映射），出现即警告
+for jf in java_files:
+    text = open(jf, encoding="utf-8").read()
+    if re.search(r"\(\s*Button\s*\)[^\n;]*\.getText\(\)", text):
+        warn("%s reads value from Button.getText(); map by id instead"
+             % os.path.basename(jf))
+
+# ---------- 7. Java 括号配对（跳过字符串与注释的粗检） ----------
 for jf in java_files:
     text = open(jf, encoding="utf-8").read()
     depth = {"{": 0, "(": 0}
@@ -195,7 +278,7 @@ for jf in java_files:
         i += 1
     if depth["{"] != 0 or depth["("] != 0:
         err("unbalanced brackets in %s: %r" % (os.path.basename(jf), depth))
-print("[5] Bracket balance checked")
+print("[7] Bracket balance checked")
 
 # ---------- 汇总 ----------
 print()
