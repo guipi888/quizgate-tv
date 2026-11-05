@@ -22,10 +22,11 @@ echo "== 安装 App 与仪器测试 APK =="
 echo "== 授予仪器测试依赖的权限 =="
 # 悬浮窗：Android 10+ 后台拉起锁屏页 / 开机恢复必需（appops 方式，重装保持）
 adb shell appops set "$PKG" SYSTEM_ALERT_WINDOW allow || true
-# 通知：前台服务常驻倒计时通知（API 33+ 运行时权限）
-adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
+# 通知：前台服务常驻倒计时通知（API 33+ 运行时权限；低版本系统不认识该权限，
+# pm grant 会在设备端抛 IllegalArgumentException，2>/dev/null 只压噪音不掩失败）
+adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 # 存储：U 盘题库导入（仅 API<=32 有效，33+ 见 README 已知限制）
-adb shell pm grant "$PKG" android.permission.READ_EXTERNAL_STORAGE || true
+adb shell pm grant "$PKG" android.permission.READ_EXTERNAL_STORAGE 2>/dev/null || true
 
 echo "== P0 ⑥ 准备 U 盘题库样本（模拟插入 U 盘）=="
 adb shell mkdir -p /sdcard/QuizGate/banks
@@ -40,65 +41,6 @@ echo "TV 桌面可见 OK"
 
 FAIL=0
 
-# ============ 一次性诊断：TV 滚动机制对照实验（结论落地后删除本段） ============
-# 背景：clickAfterScroll 原用 UiDevice.swipe，CI 实测在 TV 镜像上滑 4 次
-# 目标按钮仍 <90% 可见；Espresso scrollTo 同样无效。本段用 uiautomator 的
-# bounds（屏幕像素坐标，1920x1080）对照三种机制谁能真正滚动 ScrollView：
-#   input swipe / input motionevent / D-pad 焦点导航。
-DIAG_XML=/sdcard/qg_diag.xml
-diag_dump() {
-  for t in 1 2 3 4 5; do
-    if adb shell uiautomator dump "$DIAG_XML" >/dev/null 2>&1; then break; fi
-    sleep 2
-  done
-  adb shell cat "$DIAG_XML" 2>/dev/null | tr '<' '\n' \
-    | grep -E 'btn_start_timer|btn_change_pin|btn_lock_now|tg_custom|btn_rescan_bank|btn_parent_unlock|tv_lock_prompt' \
-    | while IFS= read -r line; do
-        id=$(printf '%s' "$line" | grep -oE 'resource-id="[^"]*"' | head -1)
-        bd=$(printf '%s' "$line" | grep -oE 'bounds="[^"]*"' | head -1)
-        tx=$(printf '%s' "$line" | grep -oE 'text="[^"]*"' | head -1)
-        echo "    $id $bd $tx"
-      done
-  return 0
-}
-echo "== DIAG-0 屏幕与输入设备 =="
-adb shell wm size || true
-adb shell wm density || true
-adb shell dumpsys input 2>/dev/null | grep -iE "Device [0-9]+:|TouchInputMapper" | head -10 || true
-echo "== DIAG-A 设置页启动后（滚动前） =="
-adb shell am force-stop "$PKG" || true
-adb shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1 \
-  || adb shell monkey -p "$PKG" -c android.intent.category.LEANBACK_LAUNCHER 1 >/dev/null 2>&1 \
-  || true
-sleep 3
-diag_dump || true
-echo "== DIAG-B input swipe x4 后 =="
-for i in 1 2 3 4; do adb shell input swipe 960 810 960 270 || true; sleep 1; done
-diag_dump || true
-echo "== DIAG-C input motionevent 序列后 =="
-adb shell input motionevent DOWN 960 810 || true
-adb shell input motionevent MOVE 960 700 || true
-adb shell input motionevent MOVE 960 500 || true
-adb shell input motionevent MOVE 960 300 || true
-adb shell input motionevent UP 960 270 || true
-sleep 1
-diag_dump || true
-echo "== DIAG-D D-pad DOWN x15 后 =="
-for i in $(seq 1 15); do adb shell input keyevent 20 || true; done
-sleep 1
-diag_dump || true
-echo "== DIAG-E 锁屏页 bounds（注入 lock_active prefs 后启动） =="
-adb shell am force-stop "$PKG" || true
-END=$(( $(date +%s) * 1000 + 1800000 ))
-# LockActivity.onCreate 见到 lock_active=false 会直接 finish，必须翻成 true
-sed "s/__LOCK_END_AT__/$END/; s/name=\"lock_active\" value=\"false\"/name=\"lock_active\" value=\"true\"/" \
-  app/src/androidTest/assets/prefs_timer_running.xml \
-  | adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cat > shared_prefs/quizgate_prefs.xml'" || true
-adb shell am start -n "$PKG/.LockActivity" >/dev/null 2>&1 || true
-sleep 3
-diag_dump || true
-adb shell am force-stop "$PKG" || true
-# ============ 诊断结束 ============
 
 echo "== 单元测试 + 仪器测试 =="
 if ./gradlew testDebugUnitTest connectedCheck --no-daemon; then

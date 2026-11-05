@@ -20,11 +20,12 @@ import static org.junit.Assert.assertTrue;
 /**
  * 家长设置页测试（P0 ①②⑦ + 自定义时长）。
  *
- * 注意：activity_main.xml 是 ScrollView，「开始计时」等按钮在 720p 一屏外。
- * Espresso 的 scrollTo() 依赖 requestRectangleOnScreen，在 TV 模拟器上
- * 滚动后仍报 not displayed（CI 首跑实测），因此统一走
- * TestSupport.clickAfterScroll()：真实滑动手势 + 可见性检查——
- * 这正是线上反馈「点开始计时无效应」的根因场景，测试对此形成回归防线。
+ * 注意：activity_main.xml 是 ScrollView，「开始计时」等按钮在 1080p 一屏外。
+ * Espresso 的 scrollTo() 在 TV 模拟器上滚动后仍报 not displayed（CI 首跑实测：
+ * immediate=false 走 smoothScrollBy 动画，同帧复检看不到效果），因此统一走
+ * TestSupport.clickAfterScroll()：requestRectangleOnScreen(rect, true) 同步
+ * 滚动 + 可见性检查——这正是线上反馈「点开始计时无效应」的根因场景，
+ * 测试对此形成回归防线。
  */
 public class MainActivityTest {
 
