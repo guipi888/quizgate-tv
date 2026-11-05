@@ -74,24 +74,40 @@ else
   echo "设备 API level: $SDK，安装/测试通道：gradle/ddmlib"
 fi
 
-# 安装单个 APK：push（纯传输）+ pm install（纯安装）分离，超时/重试各自独立。
-# 为什么不用 adb install：十一跑 API 34 三次 install 均整 3 分钟被本地
-# timeout 杀掉且无 INSTALL_FAILED_* 输出——本地客户端被杀后设备端
-# pm install 仍在跑，后续重试大概率等同一个包的会话（会话锁），
-# 三次全挂。分离后传输失败只重推、安装失败可清理会话后再试。
-# pm install /data/local/tmp 为官方文档用法。
+# 安装单个 APK（CLI 通道）。
+# 十二跑教训：push 0.05s 秒过（传输没问题），pm install 每次整 600s 被本地
+# timeout 杀——设备端 PackageManager 死等。这不是「慢」：十跑同通道
+# adb install 1-2 分钟成功过。32 位 API 34 TV 镜像 + Android 14 odsign
+# dexopt 在软件模拟器上时快时死，只能靠「拉长超时 + 双形态 + 刷新」硬刚。
+# 每次尝试：先 kill-server/start-server 刷新 transport，再依次试
+# ① adb install（十跑成功过的形态，客户端内置 push+exec）
+# ② push + pm install（传输/安装分离，失败可诊断）
 install_one_apk() {
   local apk="$1" name="$2"
   local remote="/data/local/tmp/$(basename "$apk")"
   for i in 1 2 3; do
-    log "[$name] 安装尝试 $i/3：push"
+    # 刷新 adb server：清掉可能的坏死 transport（十二跑 reboot 段同款问题）
+    adb kill-server >/dev/null 2>&1 || true
+    sleep 3
+    adb start-server >/dev/null 2>&1 || true
+    sleep 5
+    # 形态①：adb install（超时 900s）
+    log "[$name] 安装尝试 $i/3：adb install（超时 900s）"
+    local out1
+    out1=$(ADB_TIMEOUT=900 adb install -r -t "$apk" 2>&1) || true
+    echo "$out1" | grep -a -v "^$" | head -5 || true
+    if echo "$out1" | grep -aq "Success"; then
+      log "[$name] 安装成功（adb install）"
+      return 0
+    fi
+    # 形态②：push（纯传输，300s）+ pm install（纯安装，900s）
+    log "[$name] adb install 未成功，改 push + pm install（超时 900s）"
     if ADB_TIMEOUT=300 adb push "$apk" "$remote" >/dev/null 2>&1; then
-      log "[$name] push 完成，pm install（超时 600s）"
-      local out
-      out=$(ADB_TIMEOUT=600 adb shell pm install -r -t "$remote" 2>&1) || true
-      echo "$out" | grep -a -v "^$" | head -5 || true
-      if echo "$out" | grep -aq "Success"; then
-        log "[$name] 安装成功"
+      local out2
+      out2=$(ADB_TIMEOUT=900 adb shell pm install -r -t "$remote" 2>&1) || true
+      echo "$out2" | grep -a -v "^$" | head -5 || true
+      if echo "$out2" | grep -aq "Success"; then
+        log "[$name] 安装成功（pm install）"
         return 0
       fi
       log "::warning::[$name] pm install 未报 Success（尝试 $i）"
@@ -99,11 +115,10 @@ install_one_apk() {
       log "::warning::[$name] push 失败（尝试 $i）"
     fi
     # 清理：本地 timeout 杀掉 adb 后设备端 pm install 可能仍在跑，
-    # 先 reconnect 断僵死通道，再卸载清会话，最后等 installd 收尾。
-    adb reconnect >/dev/null 2>&1 || true
+    # 卸载清会话，等 installd 收尾。
     ADB_TIMEOUT=120 adb shell pm uninstall "$PKG" >/dev/null 2>&1 || true
     ADB_TIMEOUT=120 adb shell pm uninstall "$TEST_PKG" >/dev/null 2>&1 || true
-    sleep 15
+    sleep 30
   done
   log "::error::[$name] 三次安装均失败"
   return 1
@@ -269,11 +284,27 @@ log "== 真实 adb reboot，等待重新启动（上限 6 分钟）=="
 adb reboot
 # 不用 adb wait-for-device：设备不回时它是无限等（九跑 2 小时挂死嫌疑之一）。
 # 改用有界轮询 sys.boot_completed。
+# 十二跑 API 30 教训：reboot 后设备从 offline 变 "device not found" 持续
+# 6 分钟不恢复——emulator 重启后 adb server 的 transport 坏死，干等无用。
+# 分级刷新：先 reconnect（轻），再 kill-server && start-server（重，
+# 八跑证明有效），并逐级升级。
 BOOTED=0
 for i in $(seq 1 180); do
-  if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then
+  if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
     BOOTED=1
     break
+  fi
+  if [ $((i % 15)) -eq 0 ]; then
+    # 每 15 次探测（约 30s）失败：轻刷新
+    log "::warning::reboot 后第 $i 次探测仍无设备，adb reconnect"
+    adb reconnect offline >/dev/null 2>&1 || adb reconnect >/dev/null 2>&1 || true
+  fi
+  if [ $((i % 60)) -eq 0 ]; then
+    # 每 60 次探测（约 2 分钟）仍无设备：重刷新 adb server
+    log "::warning::reboot 后第 $i 次探测仍无设备，重启 adb server"
+    adb kill-server >/dev/null 2>&1 || true
+    sleep 3
+    adb start-server >/dev/null 2>&1 || true
   fi
   sleep 2
 done
